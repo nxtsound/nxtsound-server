@@ -72,8 +72,8 @@ Everything else (adding music, every feature, updating, backups, troubleshooting
 
 ## Why NxtSound?
 
-Streaming services rent you your own taste back, month after month. A folder of files on your own disk has none of that convenience:
-no good search, no recommendations, no phone app. NxtSound closes that gap.
+Streaming subscriptions charge you every month, and what you can listen to depends on licenses that can change tomorrow. Music files you own cost nothing
+more and never disappear. But a plain folder has none of the convenience: no good search, no recommendations, no phone app. NxtSound closes that gap.
 
 - **You own everything.** Files stay in your folder, history stays in a small database on your server. Nothing is sent anywhere
   (the few optional internet lookups are listed in the [privacy notes](docs/user-guide.md#privacy) and can be switched off).
@@ -85,24 +85,18 @@ no good search, no recommendations, no phone app. NxtSound closes that gap.
 
 ## Features
 
-| | Feature | Status |
-|---|---|---|
-| 🎵 | Library scan with tags, embedded covers, folder images and name-based detection | Stable |
-| 🔎 | Instant search for songs, artists, albums; artist and album pages | Stable |
-| ▶️ | Web player: queue, shuffle, repeat, drag to reorder, keyboard shortcuts, lyrics, resume position | Stable |
-| 📃 | Playlists, likes, listening history, "stop recommending this" | Stable |
-| 🏠 | Home page: "Your Mix", "Because you listened to …", automatic lists (most played, rediscover, genres, decades) | Stable |
-| 👥 | Multiple users, admin area, backup and restore | Stable |
-| 📱 | Installable web app (PWA), mobile friendly; English and German | Stable |
-| 🎚 | DJ mode and DJ fit (tempo and key aware radio, beat-matched transitions) | Alpha |
-| 📊 | Your recap (week / month / year: minutes, top songs, streaks, …) | Alpha |
-| 🧩 | Plugin system (protocol v1) | Alpha |
-| 🌐 | Optional metadata from MusicBrainz and the Cover Art Archive | Alpha |
-| 🔔 | Notification bell, update notices for server and plugins, disk space warnings | Alpha |
-| 🤝 | Community: follow friends, see what they listen to (opt-in, off by default) | Alpha |
-| 🍏 | Native iOS app with lock screen controls and offline songs | In development |
+**Ready to use**
 
-**Stable** = used every day and covered by tests. **Alpha** = works, but young: details may change and rough edges are expected. Please report what you find.
+- 🎵 **Your library**, even messy: tags, covers, and artist/album/track read from folder and file names
+- 🔎 **Instant search**, artist and album pages
+- ▶️ **A full player**: queue, shuffle, repeat, synced lyrics, resume where you left off
+- 📃 **Playlists and likes**, and a home page that learns what you like (your mix, rediscover, genres, decades)
+- 👥 **Multiple users** with an admin area, backup and restore
+- 📱 **Installable web app**, English and German
+
+**Alpha** (works, but young: details may change)
+
+🎚 DJ mode · 📊 Recap · 🧩 Plugins · 🌐 Metadata from MusicBrainz · 🔔 Notifications and update notices · 🤝 Community (opt-in) · 🍏 iOS app (in development)
 
 <table>
   <tr>
@@ -122,9 +116,15 @@ no good search, no recommendations, no phone app. NxtSound closes that gap.
 Music does not have to come from files on your disk. A plugin is a small separate program that adds a source; the server sets it up and starts it,
 and its songs show up in search, radio, playlists and recommendations.
 
-- [Online radio](https://github.com/nxtsound/nxtsound-plugin-onlineradio): live stations from radio-browser.info, with the current song
-- [Nextcloud / ownCloud](https://github.com/nxtsound/nxtsound-plugin-nextcloud): the music in a folder of your cloud
-- Your own: the [plugin guide](PLUGINS.md) and the runnable template in [`examples/hello-plugin`](examples/hello-plugin)
+**Official plugins** (maintained by this project)
+
+| Plugin | What it does | Status |
+|---|---|---|
+| [Online radio](https://github.com/nxtsound/nxtsound-plugin-onlineradio) | Live radio stations from radio-browser.info, with the current song | Alpha |
+| [Nextcloud / ownCloud](https://github.com/nxtsound/nxtsound-plugin-nextcloud) | The music in a folder of your cloud (WebDAV) | Alpha |
+
+**Community plugins** are written and maintained by others. They are listed in [docs/community-plugins.md](docs/community-plugins.md), which also says what we list and how to add yours.
+Want to write one? Start with the [plugin guide](PLUGINS.md) and the runnable template in [`examples/hello-plugin`](examples/hello-plugin).
 
 Plugins run with the rights of the server: only install plugins you trust.
 
@@ -140,8 +140,10 @@ NxtSound is free and open source (MIT) and developed in spare time. If it brings
 
 | | |
 |---|---|
-| ☕ **Ko-fi** | `KOFI_LINK_PLACEHOLDER` |
+| ☕ **Buy me a coffee** | <https://buymeacoffee.com/robingl> |
 | 💙 **PayPal** | `PAYPAL_LINK_PLACEHOLDER` |
+
+<!-- QR code: add the image as docs/buymeacoffee-qr.png and show it here with <img src="docs/buymeacoffee-qr.png" alt="Buy me a coffee" width="160"> -->
 
 **What donations pay for:** the Apple Developer Program (about 99 USD per year) for the iOS app · the domain, website and a public demo server · test devices (for example for the Android app) · and, if anything is left, time for the project.
 No money? A star, a bug report, a translation or a mention to a friend helps just as much.

@@ -1,3 +1,3 @@
-# Shows a "Sponsor" button on GitHub. Fill in your own handles and remove the leading "#".
-# ko_fi: YOUR_KOFI_NAME
+# Shows a "Sponsor" button on the repository page.
+buy_me_a_coffee: robingl
 # custom: ["https://www.paypal.com/donate/?hosted_button_id=YOUR_BUTTON_ID"]

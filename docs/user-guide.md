@@ -28,9 +28,36 @@ You do not need to be a developer. If you can copy a few commands into a termina
 - [Docker](https://docs.docker.com/get-docker/) with the Compose plugin (the command `docker compose` must work).
 - A folder with your music files. MP3, FLAC, M4A/AAC, OGG, Opus, WAV and AIFF are understood.
 
-Without Docker it works too (Python 3.12 and `ffmpeg`), see the [developer guide](developer-guide.md#running-from-source).
+Without Docker it works too (Python 3.12), see the [developer guide](developer-guide.md#running-from-source) or the README.
 
 ## Installing
+
+There are two ways. Most people want the first.
+
+### Option A: the ready-made image (recommended)
+
+No download of the source code, no build. Create a folder, put this into a file called `docker-compose.yml`, and change the two marked lines:
+
+```yaml
+services:
+  nxtsound:
+    image: ghcr.io/nxtsound/nxtsound-server:latest      # or pin a version, e.g. :0.1.0
+    restart: unless-stopped
+    ports: ["8000:8000"]
+    environment:
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: change-me-please                  # <- choose a password (8+ characters)
+    volumes:
+      - nxtsound-data:/data
+      - /path/to/your/music:/music:ro                   # <- your music folder (read-only)
+      - ./plugins:/plugins
+volumes:
+  nxtsound-data:
+```
+
+Start it with `docker compose up -d`. More settings can be added under `environment:` (see the [configuration reference](configuration.md)).
+
+### Option B: build from the source
 
 ```sh
 git clone https://github.com/nxtsound/nxtsound-server.git
@@ -52,28 +79,24 @@ Start it:
 docker compose up -d --build
 ```
 
+### After starting
+
 The web app is now on port 8000: open `http://<address of your server>:8000` (on the same computer: <http://localhost:8000>).
 
 What the setup does for you:
 
 - The music folder is attached **read-only**: NxtSound never changes or deletes your files.
-- A Docker volume called `app-data` keeps the database, covers and plugin data. Your music and this volume are all you need to keep.
+- A Docker volume keeps the database, covers and plugin data. Your music and this volume are all you need to keep.
 - A `plugins` folder next to the compose file holds plugins (see [Plugins](#plugins)).
 - The container restarts by itself after a reboot.
 
-The admin account is only created if the database is empty, so you can remove `ADMIN_USER` and `ADMIN_PASSWORD` from `.env`
-after the first start. If you start without them, the login page asks you to create the first account instead.
-
-**Using the published image instead of building:** change `build:` to `image: ghcr.io/nxtsound/nxtsound-server:latest` in
-`docker-compose.yml` (or pin a version such as `:0.1.0`) and use `docker compose pull && docker compose up -d`.
+The admin account is only created if the database is empty, so you can remove `ADMIN_USER` and `ADMIN_PASSWORD` afterwards.
+If you start without them, the login page asks you to create the first account instead.
 
 ### Updating
 
-```sh
-cd nxtsound-server
-git pull
-docker compose up -d --build
-```
+- **Option A (image):** `docker compose pull && docker compose up -d`.
+- **Option B (source):** `cd nxtsound-server && git pull && docker compose up -d --build`.
 
 Your data stays in the volume. Open the admin area → System to see the version. The server tells admins when a new version
 exists (the bell), but it never updates itself.

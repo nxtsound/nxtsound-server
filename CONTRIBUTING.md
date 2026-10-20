@@ -57,7 +57,7 @@ and I will help with anything the server needs. You do not have to finish it alo
 
 A plugin lives in its own repository and speaks a small HTTP protocol. Start from [`examples/hello-plugin/`](examples/hello-plugin) and the [plugin guide](PLUGINS.md).
 Name it `nxtsound-plugin-<name>`, give it a `plugin.json`, a license and a README with install instructions, and test it with `plugincheck.py`.
-Once it works, open an issue to get it listed in the docs.
+Once it works, you can add it to [docs/community-plugins.md](docs/community-plugins.md) with a pull request (the page lists what we accept).
 
 ## Translations
 
