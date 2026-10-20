@@ -310,7 +310,15 @@ Reaching the server's port directly always works for a test.
 ## Privacy
 
 - Your music, history, playlists and likes live on **your** server only.
-- The optional internet lookups are listed in the [README](../README.md#what-talks-to-the-internet), each can be turned off.
+- The server only talks to the internet in the cases below. Every one of them can be switched off.
+
+| What | Why | Switch off |
+|---|---|---|
+| `api.github.com` | looks for a newer NxtSound release and for newer versions of plugins you installed from a repository (it never updates anything by itself) | `UPDATE_CHECK_HOURS=0` |
+| MusicBrainz, Cover Art Archive | fills in missing year, cover and artist description (only artist and album names are sent) | `ENRICH=0` |
+| lrclib.net | song lyrics (only the song title, artist, album and length are sent) | `LYRICS=0` |
+| Plugins you install | whatever the plugin does (for example the radio plugin asks radio-browser.info) | do not install them |
+
 - Passwords are stored as salted hashes; sessions expire; the database only holds a hash of your session cookie.
 - Logs never contain passwords, and failed logins are not logged with names.
 - Community sharing is opt-in per person.
