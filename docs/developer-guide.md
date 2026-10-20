@@ -68,6 +68,7 @@ secure by default, and the core stays free of any third-party service.
 | `tests/` | pytest suite (see [Tests](#tests)). `fakeplugin.py` is a stand-in plugin. |
 | `examples/hello-plugin/` | A complete, runnable plugin template. |
 | `docs/` | This documentation. |
+| `tools/demo/` | Builds a demo instance (made-up library) and takes the README screenshots at desktop and phone size. |
 | `PLUGINS.md` | The plugin protocol, reference for plugin authors. |
 | `whatsnew.json` | The "What's new" cards shown once per user after an update (English and German). |
 | `VERSION` | The version number. |

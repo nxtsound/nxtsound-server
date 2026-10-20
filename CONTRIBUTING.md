@@ -13,7 +13,7 @@ screenshots, bug reports, and good ideas.
 | Languages | Translate the app into your language (one JSON file, no code). |
 | Writing | Improve the [user guide](docs/user-guide.md), the [developer guide](docs/developer-guide.md), or add a FAQ entry. |
 | Testing | Try the alpha features, report what breaks, say what is confusing. |
-| Design | Take screenshots (`docs/screenshots/`), suggest improvements. |
+| Design | Suggest improvements; update the screenshots (`tools/demo` builds the demo data and takes them). |
 
 ## Android app
 

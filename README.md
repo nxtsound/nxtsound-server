@@ -11,7 +11,7 @@ Point it at a folder of music files and it feels like a streaming service that b
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Status: alpha](https://img.shields.io/badge/status-alpha-orange)
 
-<img src="docs/screenshots/home.svg" alt="Home page" width="55%">
+<img src="docs/screenshots/home.png" alt="Home page" width="55%">
 
 [Quick start](#quick-start) · [Why](#why-nxtsound) · [Features](#features) · [Plugins](#plugins) · [Roadmap](#roadmap) · [Support](#support-the-project) · [Contribute](#contributing) · [Docs](#documentation)
 
@@ -100,16 +100,25 @@ more and never disappear. But a plain folder has none of the convenience: no goo
 
 <table>
   <tr>
-    <td width="33%"><img src="docs/screenshots/player.svg" alt="Player"></td>
-    <td width="33%"><img src="docs/screenshots/search.svg" alt="Search"></td>
-    <td width="33%"><img src="docs/screenshots/playlists.svg" alt="Playlists and automatic lists"></td>
+    <td width="33%"><img src="docs/screenshots/player.png" alt="Player"></td>
+    <td width="33%"><img src="docs/screenshots/search.png" alt="Search"></td>
+    <td width="33%"><img src="docs/screenshots/playlists.png" alt="A playlist"></td>
   </tr>
   <tr>
-    <td width="33%"><img src="docs/screenshots/recap.svg" alt="Your recap"></td>
-    <td width="33%"><img src="docs/screenshots/community.svg" alt="Community"></td>
-    <td width="33%"><img src="docs/screenshots/admin-plugins.svg" alt="Admin area: plugins"></td>
+    <td width="33%"><img src="docs/screenshots/recap.png" alt="Your recap"></td>
+    <td width="33%"><img src="docs/screenshots/community.png" alt="Community"></td>
+    <td width="33%"><img src="docs/screenshots/admin-plugins.png" alt="Admin area: plugins"></td>
   </tr>
 </table>
+
+**On your phone** (the web app adapts; the native iOS app is in development):
+
+<p>
+  <img src="docs/screenshots/home-mobile.png" alt="Home on a phone" width="23%">
+  <img src="docs/screenshots/player-mobile.png" alt="Player on a phone" width="23%">
+  <img src="docs/screenshots/search-mobile.png" alt="Search on a phone" width="23%">
+  <img src="docs/screenshots/recap-mobile.png" alt="Recap on a phone" width="23%">
+</p>
 
 ## Plugins
 

@@ -1009,7 +1009,7 @@ async function adminPlugins() {
     ${pl.dir_problem ? `<div class="sub" style="padding:0 0 10px;color:#e57373">${esc(pl.dir_problem)}</div>` : ''}</section>
     <section class="acard"><h3>${esc(tr('Add a plugin'))}</h3>
     ${pl.repo_install ? `<div class="sub" style="padding:0 0 4px"><b>${esc(tr('Install from a repository'))}</b></div>
-    <input id="pluginRepo" placeholder="https://github.com/…/mein-plugin" autocapitalize="off" autocorrect="off" style="width:100%;margin-bottom:8px">
+    <input id="pluginRepo" placeholder="https://github.com/…/my-plugin" autocapitalize="off" autocorrect="off" style="width:100%;margin-bottom:8px">
     <div class="actions" style="margin:0"><button class="btn sec" data-act="pluginInstall">${esc(tr('Install'))}</button></div>`
       : `<div class="sub" style="padding:0">${esc(tr('Installation by repository address is turned off on this server.'))}</div>`}
     ${pl.upload_install ? `<div class="sub" style="padding:12px 0 4px"><b>${esc(tr('Upload a ZIP'))}</b></div>

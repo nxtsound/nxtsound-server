@@ -1,5 +1,6 @@
 # Screenshots
 
-The README shows the `.svg` placeholders in this folder. To replace one, add a screenshot with the same name and the extension `.png`
-(for example `home.png`, about 1600 × 1000 px, dark theme, with demo data and no personal information) and change the file name in
-`README.md`. Delete the placeholder afterwards.
+The screenshots in the README show a demo instance with made-up artists and generated audio; nothing in them is real music or personal data.
+They are produced by the scripts in [`tools/demo`](../../tools/demo/README.md): once at desktop size (1440 × 900) and once at phone size (390 × 844, shown at 2× resolution, file names end in `-mobile`).
+
+To update them after a visible change: start the demo, run `shots.py`, and commit the new files. Keep the file names, the README refers to them.
