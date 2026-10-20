@@ -154,7 +154,7 @@ NxtSound is free and open source (MIT) and developed in spare time. If it brings
 | ☕ **Buy me a coffee** | <https://buymeacoffee.com/robingl> |
 | 💙 **PayPal** | `PAYPAL_LINK_PLACEHOLDER` |
 
-<!-- QR code: add the image as docs/buymeacoffee-qr.png and show it here with <img src="docs/buymeacoffee-qr.png" alt="Buy me a coffee" width="160"> -->
+<img src="docs/buymeacoffee-qr.png" alt="QR code: Buy me a coffee" width="140">
 
 **What donations pay for:** the Apple Developer Program (about 99 USD per year) for the iOS app · the domain, website and a public demo server · test devices (for example for the Android app) · and, if anything is left, time for the project.
 No money? A star, a bug report, a translation or a mention to a friend helps just as much.
