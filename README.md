@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="static/icon.svg" alt="NxtSound logo" width="110">
+
 # NxtSound
 
 **Your music. Your server. No subscription, no tracking.**
