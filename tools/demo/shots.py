@@ -9,6 +9,9 @@ which = sys.argv[2].split(",")
 MODES = {"desktop": dict(viewport={"width": 1440, "height": 900}, device_scale_factor=1),
          "mobile": dict(viewport={"width": 390, "height": 844}, device_scale_factor=2, is_mobile=True, has_touch=True)}
 
+# The demo password is random and written by seed.py (DEMO_PASSWORD overrides it)
+PASSWORD = os.environ.get("DEMO_PASSWORD") or (Path(os.environ.get("DEMO_DIR", str(Path(__file__).resolve().parent / "work"))) / "demo-password.txt").read_text().strip()
+
 # The admin pages print this machine's folders (plugins folder, repository of a locally installed plugin). Show the usual Docker paths instead.
 PLUGINS_DIR = os.environ.get("DEMO_DIR", str(Path(__file__).resolve().parent / "work")) + "/plugins"
 LOCAL_REPOS = os.environ.get("DEMO_LOCAL_REPOS", "")  # e.g. /path/to/checkouts/  ->  https://github.com/nxtsound/
@@ -25,7 +28,7 @@ with sync_playwright() as p:
     browser = p.chromium.launch(channel="chrome", args=["--autoplay-policy=no-user-gesture-required"])
     for mode, opts in MODES.items():
         ctx = browser.new_context(locale="en-US", color_scheme="dark", **opts)
-        ctx.request.post(BASE + "/api/login", data={"name": "demo", "password": "demo-pass-1234"})
+        ctx.request.post(BASE + "/api/login", data={"name": "demo", "password": PASSWORD})
         page = ctx.new_page()
         def shot(name): page.screenshot(path=str(OUT / (name + ("" if mode == "desktop" else "-mobile") + ".png"))); print(mode, name)
         if "home" in which:

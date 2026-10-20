@@ -7,7 +7,7 @@ once at desktop size and once at phone size. Run them from the repository root; 
 pip install pillow playwright mutagen numpy        # tools only, not needed to run the server
 python tools/demo/gen.py tools/demo/work/music     # 37 tiny audio files with tags and cover art
 python tools/demo/seed.py                          # users, history, likes, playlists, friends
-python tools/demo/run_demo.py &                    # the demo server on http://localhost:8030 (log in as demo / demo-pass-1234)
+python tools/demo/run_demo.py &                    # the demo server on http://localhost:8030 (log in as `demo`; the random password is in `tools/demo/work/demo-password.txt`)
 python tools/demo/shots.py docs/screenshots home,player,search,playlists,recap,community
 ```
 
@@ -16,4 +16,4 @@ then `python tools/demo/shots.py docs/screenshots admin-plugins,plugin-settings`
 so the pages show `https://github.com/nxtsound/…` instead of your paths. Chrome must be installed (Playwright uses it).
 
 Environment: `DEMO_DIR` (work folder), `DEMO_PORT` (default 8030), `DEMO_URL` (where `shots.py` looks).
-The demo password is a throw-away value for this local instance only.
+`seed.py` generates a new random password for every demo database and writes it to `demo-password.txt` (set `DEMO_PASSWORD` to override it for `shots.py`).

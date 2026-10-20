@@ -1,5 +1,5 @@
 """Fills a demo database: users, 75 days of listening history, likes, playlists, friends. Run gen.py first (see README.md)."""
-import os, random, sys, time
+import os, random, secrets, sys, time
 from pathlib import Path
 HERE = Path(__file__).resolve().parent
 D = os.environ.get("DEMO_DIR", str(HERE / "work"))
@@ -10,9 +10,11 @@ import db, library
 os.makedirs(f"{D}/data", exist_ok=True)
 db.init_db()
 rnd = random.Random(11)
+PASSWORD = secrets.token_urlsafe(12)  # a new random password for every demo database; shots.py reads it from the file
+Path(f"{D}/demo-password.txt").write_text(PASSWORD + "\n")
 for name, admin in (("demo", True), ("maria", False), ("jonas", False), ("lena", False)):
     if not db.find_user(name):
-        db.create_user(name, "demo-pass-1234", admin)
+        db.create_user(name, PASSWORD, admin)
 uid = {n: db.find_user(n)["id"] for n in ("demo", "maria", "jonas", "lena")}
 with db.db() as c:
     c.execute("UPDATE users SET onboarded = 1, news_seen = '0.1.0'")
@@ -71,4 +73,4 @@ with db.db() as c:  # one friend is listening right now
     c.execute(f"INSERT INTO plays(user_id, {db._INSERT_COLS}, played_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (uid["maria"], *db._track_values(t), int(now - 45)))
 db.set_share(uid["demo"], True); db.follow(uid["lena"], uid["demo"])
 db.notify(uid["demo"], f"follow:{uid['lena']}", "follow", {"user_id": uid["lena"], "name": "lena"})
-print("seeded")
+print("seeded; log in as demo with the password in", f"{D}/demo-password.txt")

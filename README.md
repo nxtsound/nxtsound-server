@@ -149,10 +149,7 @@ Plugins run with the rights of the server: only install plugins you trust.
 
 NxtSound is free and open source (MIT) and developed in spare time. If it brings you joy you can chip in; donations are voluntary and buy no features or priority.
 
-| | |
-|---|---|
-| ☕ **Buy me a coffee** | <https://buymeacoffee.com/robingl> |
-| 💙 **PayPal** | `PAYPAL_LINK_PLACEHOLDER` |
+☕ **Buy me a coffee:** <https://buymeacoffee.com/robingl>
 
 <img src="docs/buymeacoffee-qr.png" alt="QR code: Buy me a coffee" width="140">
 
