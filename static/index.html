@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-title" content="NxtSound">
+<title>NxtSound</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app" hidden>
+  <nav id="side" aria-label="Navigation" data-i18n-aria="Navigation">
+    <div class="side-brand" role="link" tabindex="0" aria-label="Home" data-i18n-aria="Home" data-appname>NxtSound</div>
+    <a href="#/home" data-tab="home"><span data-ic="home"></span><span data-i18n="Home">Home</span></a>
+    <a href="#/playlists" data-tab="playlists"><span data-ic="lists"></span><span data-i18n="Playlists">Playlists</span></a>
+    <a href="#/likes" data-tab="likes"><span data-ic="like"></span><span data-i18n="Liked songs">Liked songs</span></a>
+    <a href="#/community" data-tab="community" id="sideCommunity" hidden><span data-ic="friends"></span><span data-i18n="Community">Community</span></a>
+    <a href="#/admin" data-tab="admin" id="sideUsers" hidden><span data-ic="people"></span><span data-i18n="Admin area">Admin area</span></a>
+  </nav>
+  <header id="mainHeader">
+    <div class="topbar">
+      <div class="brand" role="link" tabindex="0" aria-label="Home" data-i18n-aria="Home" data-appname>NxtSound</div>
+      <button id="searchOpen" class="ibtn" aria-label="Search" data-i18n-aria="Search" data-ic="search"></button>
+      <button id="bellBtn" class="ibtn bell" aria-label="Notifications" data-i18n-aria="Notifications"><span data-ic="bell"></span><i id="bellCount" hidden></i></button>
+      <button id="userBtn" class="avatar" aria-label="Account" data-i18n-aria="Account">?</button>
+    </div>
+    <nav id="tabs">
+      <a href="#/home" data-tab="home" data-i18n="Home">Home</a>
+      <a href="#/playlists" data-tab="playlists" data-i18n="Playlists">Playlists</a>
+      <a href="#/community" data-tab="community" id="tabCommunity" hidden data-i18n="Community">Community</a>
+    </nav>
+  </header>
+
+  <header id="searchHeader" hidden>
+    <form id="searchForm" autocomplete="off">
+      <div class="pill">
+        <button type="button" id="searchBack" class="ibtn" aria-label="Back" data-i18n-aria="Back" data-ic="back"></button>
+        <input id="q" type="search" enterkeyhint="search" placeholder="Enter a search term" data-i18n-ph="Enter a search term" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+        <button type="button" id="qClear" class="ibtn" aria-label="Clear" data-i18n-aria="Clear" data-ic="close" hidden></button>
+      </div>
+    </form>
+  </header>
+
+  <div id="body">
+    <div id="ptr" aria-hidden="true"><svg class="ic" viewBox="0 0 24 24"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></div>
+    <main id="view"></main>
+    <div id="suggest" hidden></div>
+  </div>
+
+  <div id="mini" hidden>
+    <div id="mProgWrap"><i id="mProg"></i></div>
+    <div class="mrow">
+      <button id="mOpen" class="mopen" aria-label="Open player" data-i18n-aria="Open player">
+        <img id="mCover" alt="" referrerpolicy="no-referrer">
+        <span class="meta"><span class="t" id="mTitle"></span><span class="a" id="mArtist"></span></span>
+      </button>
+      <div class="mctl">
+        <button id="mPrev" class="ibtn only-desk" aria-label="Previous" data-i18n-aria="Previous" data-ic="prev"></button>
+        <button id="mPlay" class="ibtn" aria-label="Play/Pause" data-i18n-aria="Play/Pause"></button>
+        <button id="mNext" class="ibtn" aria-label="Next" data-i18n-aria="Next" data-ic="next"></button>
+      </div>
+      <div class="mextra only-desk">
+        <span id="mTime"></span>
+        <button id="mMute" class="ibtn" aria-label="Mute" data-i18n-aria="Mute" data-ic="vol"></button>
+        <input id="mVol" type="range" min="0" max="1" step="0.01" value="1" aria-label="Volume" data-i18n-aria="Volume">
+        <button id="mQueue" class="ibtn" aria-label="Queue" data-i18n-aria="Queue" data-ic="lists"></button>
+        <button id="mExpand" class="ibtn" aria-label="Enlarge player" data-i18n-aria="Enlarge player" data-ic="up"></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section id="full" aria-label="Player" data-i18n-aria="Player">
+  <div class="f-top">
+    <button id="fClose" class="ibtn" aria-label="Close player" data-i18n-aria="Close player" data-ic="down"></button>
+    <div class="f-mode" data-i18n="Song">Song</div>
+    <button id="fMenu" class="ibtn" aria-label="Menu" data-i18n-aria="Menu" data-ic="more"></button>
+  </div>
+  <div class="f-art"><img id="fCover" alt="" referrerpolicy="no-referrer"></div>
+  <div id="fLyr" class="f-lyr" hidden></div>
+  <div class="f-meta">
+    <button id="fTitle" class="f-title" type="button"><span id="fTitleText"></span><span class="chev" data-ic="right"></span></button>
+    <button id="fArtist" class="f-artist" type="button"></button>
+    <div id="fSrc" class="f-src"></div>
+      </div>
+  <div class="f-pills">
+    <button id="fLike" class="pillbtn" type="button"></button>
+    <button id="fAdd" class="pillbtn" type="button"></button>
+    <button id="fArtistBtn" class="pillbtn" type="button" data-i18n="Artist">Artist</button>
+    <button id="fAlbumBtn" class="pillbtn" type="button" data-i18n="Album">Album</button>
+  </div>
+  <div class="f-seek">
+    <div id="fBar"><div class="track"><i id="fProg"></i></div><b id="fKnob"></b></div>
+    <div id="fLive" class="f-live" hidden><span data-i18n="Live">Live</span></div>
+    <div id="fNow" class="f-now" hidden></div>
+    <div class="f-times"><span id="fCur">0:00</span><span id="fLoad"></span><span id="fDur"></span></div>
+  </div>
+  <div class="f-ctl">
+    <button id="fShuffle" class="ibtn side" aria-label="Shuffle" data-i18n-aria="Shuffle" data-ic="shuffle"></button>
+    <button id="fPrev" class="ibtn skip" aria-label="Previous" data-i18n-aria="Previous" data-ic="prev"></button>
+    <button id="fPlay" class="bigplay" aria-label="Play/Pause" data-i18n-aria="Play/Pause"></button>
+    <button id="fNext" class="ibtn skip" aria-label="Next" data-i18n-aria="Next" data-ic="next"></button>
+    <button id="fRepeat" class="ibtn side" aria-label="Repeat" data-i18n-aria="Repeat"></button>
+  </div>
+  <div class="f-tools">
+    <button id="fLyrBtn" class="toolbtn" type="button" aria-label="Lyrics" data-i18n-aria="Lyrics"><span data-ic="lyrics"></span><span data-i18n="Lyrics">Lyrics</span></button>
+    <button id="fDjBtn" class="toolbtn" type="button" aria-label="DJ mode" data-i18n-aria="DJ mode" hidden><span data-ic="disc"></span><span id="fDjLbl">DJ</span></button>
+  </div>
+  <button id="fQueue" class="f-handle" type="button"><span class="grab"></span><span id="fQueueLabel" data-i18n="Queue">Queue</span></button>
+  <div id="qPanel">
+    <div class="q-head"><span id="qTitle" data-i18n="Queue">Queue</span><span class="q-actions"><button id="qRest" class="chip" type="button" data-i18n="Clear rest">Clear rest</button><button id="qClose" class="ibtn" aria-label="Close" data-i18n-aria="Close" data-ic="down"></button></span></div>
+    <div id="qList"></div>
+  </div>
+</section>
+
+<div id="unreach" hidden>
+  <div class="unreach-box">
+    <img class="login-logo" src="icon.svg" alt="" width="72" height="72">
+    <h1 data-i18n="Server not reachable">Server not reachable</h1>
+    <p class="dim" data-i18n="The page could not reach the server. Check your connection.">The page could not reach the server. Check your connection.</p>
+    <button class="btn" onclick="location.reload()" data-i18n="Try again">Try again</button>
+  </div>
+</div>
+
+<div id="login" hidden>
+  <form id="loginForm" autocomplete="on">
+    <img class="login-logo" src="icon.svg" alt="" width="72" height="72">
+    <h1 data-appname>NxtSound</h1>
+    <p class="dim" id="loginHint" data-i18n="Log in. Accounts are created by the admin.">Log in. Accounts are created by the admin.</p>
+    <input id="loginName" name="username" placeholder="Name" data-i18n-ph="Name" maxlength="32" autocomplete="username" autocapitalize="words" required>
+    <input id="loginPw" name="password" type="password" placeholder="Password" data-i18n-ph="Password" maxlength="200" autocomplete="current-password" required>
+    <button class="btn" id="loginBtn" type="submit" data-i18n="Log in">Log in</button>
+    <div id="loginErr" class="err"></div>
+  </form>
+</div>
+
+<div id="tour" hidden role="dialog" aria-modal="true" aria-label="Introduction" data-i18n-aria="Introduction"></div>
+
+<div id="sheet" hidden><div class="backdrop"></div><div class="panel"></div></div>
+<div id="toast"></div>
+<audio id="audio" preload="auto" playsinline></audio>
+<script src="scrollbars.js"></script>
+<script src="tutorial.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

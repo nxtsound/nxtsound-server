@@ -1,0 +1,48 @@
+name: nxtsound
+
+services:
+  server:
+    build:
+      context: .
+      args:
+        GIT_COMMIT: "${GIT_COMMIT:-}"
+    image: nxtsound-server:latest
+    restart: unless-stopped
+    ports:
+      - "8000:8000"   # behind a reverse proxy better "127.0.0.1:8000:8000"
+    environment:
+      APP_NAME: "${APP_NAME:-NxtSound}"
+      SESSION_DAYS: "${SESSION_DAYS:-30}"
+      SESSION_MAX_DAYS: "${SESSION_MAX_DAYS:-180}"
+      UPDATE_REPO: "${UPDATE_REPO:-nxtsound/nxtsound-server}"
+      UPDATE_CHECK_HOURS: "${UPDATE_CHECK_HOURS:-6}"
+      DISK_WARN_GB: "${DISK_WARN_GB:-1}"
+      DISK_WARN_PERCENT: "${DISK_WARN_PERCENT:-10}"
+      ADMIN_USER: "${ADMIN_USER:-}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+      TRUST_PROXY: "${TRUST_PROXY:-0}"
+      COOKIE_SECURE: "${COOKIE_SECURE:-auto}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-}"
+      DEFAULT_LANG: "${DEFAULT_LANG:-en}"
+      LYRICS: "${LYRICS:-1}"
+      PLUGIN_REPO_INSTALL: "${PLUGIN_REPO_INSTALL:-1}"
+      PLUGIN_UPLOAD: "${PLUGIN_UPLOAD:-1}"
+      LOG_LEVEL: "${LOG_LEVEL:-}"
+      LOG_ACCESS: "${LOG_ACCESS:-}"
+      LOG_LEVEL_SERVER: "${LOG_LEVEL_SERVER:-}"
+      LOG_LEVEL_LIBRARY: "${LOG_LEVEL_LIBRARY:-}"
+      LOG_LEVEL_ENRICH: "${LOG_LEVEL_ENRICH:-}"
+      LOG_LEVEL_PLUGINS: "${LOG_LEVEL_PLUGINS:-}"
+      LOG_LEVEL_PLUGIN_OUTPUT: "${LOG_LEVEL_PLUGIN_OUTPUT:-}"
+      LOG_LEVEL_OTHER: "${LOG_LEVEL_OTHER:-}"
+      ENRICH: "${ENRICH:-1}"
+      ANALYZE: "${ANALYZE:-1}"
+      SCAN_MINUTES: "${SCAN_MINUTES:-0}"
+      MUSIC_ACCESS: "${MUSIC_ACCESS:-ro}"
+    volumes:
+      - app-data:/data
+      - "${MUSIC_PATH:-./music}:/music:${MUSIC_ACCESS:-ro}"   # music folder; read-only unless MUSIC_ACCESS=rw (then plugins keep songs in /music/<plugin>/)
+      - "${PLUGINS_PATH:-./plugins}:/plugins"   # plugins (installed by hand or in the admin area)
+
+volumes:
+  app-data:

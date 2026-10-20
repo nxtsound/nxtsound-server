@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.env
+data/
+cache/
+library/
+*.db
+.DS_Store
+music/
+plugins/
+plugin-data/
+CLAUDE.local.md

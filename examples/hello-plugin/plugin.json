@@ -1,0 +1,43 @@
+{
+  "id": "hello",
+  "name": "Hello-Plugin",
+  "version": "1.1.0",
+  "api_version": 1,
+  "entry": "app:app",
+  "requirements": "requirements.txt",
+  "description": "Example plugin: three test songs made of generated tones. Template for your own plugins.",
+  "settings": [
+    {
+      "key": "shout",
+      "type": "bool",
+      "label": {
+        "en": "Titles in capital letters",
+        "de": "Titel in Großbuchstaben"
+      },
+      "help": {
+        "en": "Example of an on/off setting.",
+        "de": "Beispiel für eine Ein/Aus-Einstellung."
+      },
+      "default": false
+    },
+    {
+      "key": "max_results",
+      "type": "int",
+      "label": {
+        "en": "Songs per search",
+        "de": "Titel pro Suche"
+      },
+      "unit": {
+        "en": "songs",
+        "de": "Titel"
+      },
+      "min": 1,
+      "max": 3,
+      "default": 3,
+      "help": {
+        "en": "Example of a number setting.",
+        "de": "Beispiel für eine Zahleneinstellung."
+      }
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+[
+  {
+    "version": "0.1.0",
+    "title": "What's new",
+    "items": [
+      {
+        "title": "Your own music library",
+        "text": "The server now plays your own files: tags, covers, artist and album pages, search.",
+        "title_de": "Eigene Musikbibliothek",
+        "text_de": "Der Server spielt jetzt deine eigenen Dateien: Tags, Cover, Künstler- und Albumseiten, Suche."
+      },
+      {
+        "title": "Your Mix",
+        "text": "The home page learns from what you listen to and suggests similar tracks from the library.",
+        "title_de": "Dein Mix",
+        "text_de": "Die Startseite lernt aus dem, was du hörst, und schlägt Ähnliches aus der Bibliothek vor."
+      },
+      {
+        "title": "Detection from folders and file names",
+        "text": "If tags are missing, the server reads artist, album, title and track number from folders and file names.",
+        "title_de": "Erkennung aus Ordnern und Dateinamen",
+        "text_de": "Fehlen Tags, liest der Server Künstler, Album, Titel und Tracknummer aus Ordnern und Dateinamen."
+      },
+      {
+        "title": "Information from the internet",
+        "text": "The server fetches missing covers, release years and artist descriptions from MusicBrainz. Can be turned off in the admin area.",
+        "title_de": "Infos aus dem Internet",
+        "text_de": "Fehlende Cover, Erscheinungsjahre und Künstlerbeschreibungen holt der Server aus MusicBrainz. Im Admin-Bereich abschaltbar."
+      },
+      {
+        "title": "For you",
+        "text": "Automatic lists under “Playlists”: most played, rediscover, genre and decade mixes and mixes of your favourite artists.",
+        "title_de": "Für dich",
+        "text_de": "Automatische Listen unter „Playlists“: Meistgehört, Wiederentdecken, Genre- und Jahrzehnt-Mixe und Mixe deiner Lieblingskünstler."
+      },
+      {
+        "title": "Smoother transitions",
+        "text": "Radio and mixes prefer tracks with a matching tempo and key. In DJ mode they are ordered into smooth transitions.",
+        "title_de": "Bessere Übergänge",
+        "text_de": "Radio und Mixe bevorzugen Titel mit passendem Tempo und passender Tonart. Im DJ-Modus werden sie zu sanften Übergängen sortiert."
+      }
+    ]
+  }
+]

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500" role="img" aria-label="Screenshot placeholder: Admin area: plugins">
+  <rect width="800" height="500" rx="14" fill="#14141a"/>
+  <rect x="1" y="1" width="798" height="498" rx="13" fill="none" stroke="#3a3a46" stroke-width="2" stroke-dasharray="10 8"/>
+  <text x="400" y="235" font-family="system-ui, sans-serif" font-size="26" fill="#e8e8ee" text-anchor="middle">Screenshot placeholder</text>
+  <text x="400" y="275" font-family="system-ui, sans-serif" font-size="20" fill="#9a9aa8" text-anchor="middle">Admin area: plugins</text>
+  <text x="400" y="315" font-family="system-ui, sans-serif" font-size="15" fill="#6c6c7a" text-anchor="middle">docs/screenshots/admin-plugins.png</text>
+</svg>

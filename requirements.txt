@@ -1,0 +1,6 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+mutagen>=1.47
+numpy>=1.26
+httpx>=0.27
+python-multipart>=0.0.9
