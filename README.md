@@ -141,9 +141,22 @@ Plugins run with the rights of the server: only install plugins you trust.
 
 ## Roadmap
 
-- **Now:** first public release (0.1.0), collecting feedback on the alpha features.
-- **Next:** 🍏 the **iOS app** (built, being tested; TestFlight / App Store) · 🌐 the **project website** (nxtsound.app) with a tour and a live demo.
-- **Later:** 🤖 an **Android app** (wanted, see below) · 🧩 a directory of community plugins. Ideas welcome: open an issue.
+**Now**
+- First public release (0.1.0) and feedback on the alpha features.
+
+**Next**
+- 🍏 **iOS app**: built and being tested; release via TestFlight and the App Store.
+- 🌐 **Project website** (nxtsound.app) with a tour, the docs and a live demo.
+- 🌍 **More languages**: the app speaks English and German today; every new language is one translation file ([how](docs/developer-guide.md#translations)).
+
+**Later**
+- 🤖 **Android app**: wanted, and a great place to [contribute](#contributing).
+- 🚗 **CarPlay and Android Auto**: depends on the native apps above.
+- 📚 **Multiple libraries**: connect several music folders to one server.
+- 🖥 **Desktop app** for Mac, Windows and Linux.
+- 🧩 **More plugins**, for example podcasts, and a **directory of community plugins**.
+
+Have an idea? Open an issue.
 
 ## Support the project
 
