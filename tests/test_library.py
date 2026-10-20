@@ -173,11 +173,11 @@ def test_guess_filename_artist_with_album_folder():
 
 def test_scan_uses_path_when_tags_missing(alice, lib):
     write_wav(lib / "Muse" / "Absolution" / "02 - Hysteria.wav")
-    write_wav(lib / "Loose" / "Moby - Porcelain.wav")
+    write_wav(lib / "Singles" / "Moby - Porcelain.wav")  # a folder that does not exist yet: names differing only in case are one folder on some file systems
     main.library.scan()
     t = {x["title"]: x for x in alice.get("/api/search", params={"q": "e"}).json()["items"] + alice.get("/api/search", params={"q": "o"}).json()["items"]}
     assert t["Hysteria"]["artist"] == "Muse" and t["Hysteria"]["album"] == "Absolution"
-    assert t["Porcelain"]["artist"] == "Moby" and t["Porcelain"]["album"] == "loose"
+    assert t["Porcelain"]["artist"] == "Moby" and t["Porcelain"]["album"] == "Singles"
 
 
 # ---------- Enrichment (MusicBrainz, without network) ----------
