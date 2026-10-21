@@ -934,7 +934,7 @@ function pluginCard(p) {
     : upd ? btn('pluginUpdateInfo', 'download', tr('Update available'), 'ok')
     : btn('pluginCheck', 'check', tr('Check for updates'));
   const hasSettings = (p.settings && p.settings.length) || (p.actions && p.actions.length);
-  return `<details class="plg${upd ? ' hasupd' : ''}" data-id="${id}" data-name="${esc((p.name + ' ' + p.id).toLowerCase())}" data-plugin-busy="${busy ? 1 : 0}"${S.popen.has(p.id) || err || busy ? ' open' : ''}>
+  return `<details class="plg${upd ? ' hasupd' : ''}" data-id="${id}" data-sig="${esc([p.state, p.message, p.enabled, p.last_error, p.version].join('|'))}" data-name="${esc((p.name + ' ' + p.id).toLowerCase())}" data-plugin-busy="${busy ? 1 : 0}"${S.popen.has(p.id) || err || busy ? ' open' : ''}>
     <summary><span class="pdot ${tone}"></span>
       <span class="pmain"><span class="pname">${esc(p.name)} <span class="dim">${p.version ? esc(p.version) : ''}</span></span><span class="psub dim small">${esc(p.description || '')}</span></span>
       <span class="pbadges">${upd ? `<span class="pbadge ok">${esc(tr('Update available'))}</span>` : ''}<span class="pbadge ${tone}">${esc(stateText)}</span></span>
@@ -1158,9 +1158,30 @@ async function viewAdmin(my, sub = '') {
   view.innerHTML = `<div class="acct wide">
     <div class="acct-head"><div><h1>${esc(tr('Admin area'))}</h1></div></div>
     ${adminTabs(sub)}${body}</div>`;
-  if (sub === 'plugins' && view.querySelector('[data-plugin-busy="1"]')) {  // plugin is being set up: keep the display updated
-    setTimeout(() => { if (my === S.nav) route(); }, 3000);
-  }
+  if (sub === 'plugins' && view.querySelector('[data-plugin-busy="1"]')) setTimeout(() => pollBusyPlugins(my), 3000);  // a plugin is being set up
+}
+
+// While a plugin is installed or started, only its own card is refreshed, not the whole page: filter, open cards and typed text stay as they are.
+async function pollBusyPlugins(my) {
+  const view = $('#view');
+  if (my !== S.nav || !view.querySelector('[data-plugin-busy="1"]')) return;
+  let pl;
+  try { pl = await api('/admin/plugins'); } catch (_) { setTimeout(() => pollBusyPlugins(my), 3000); return; }
+  if (my !== S.nav) return;
+  let known = true;
+  pl.plugins.forEach((p) => {
+    const el = view.querySelector(`details.plg[data-id="${p.id}"]`);
+    if (!el) { known = false; return; }
+    const sig = [p.state, p.message, p.enabled, p.last_error, p.version].join('|');
+    if (el.dataset.sig === sig) return;
+    const wasBusy = el.dataset.pluginBusy === '1';
+    el.outerHTML = pluginCard(p);
+    const fresh = view.querySelector(`details.plg[data-id="${p.id}"]`);
+    if (fresh) fresh.dataset.sig = sig;
+    if (wasBusy && !['installing', 'starting'].includes(p.state)) loadSources();  // it is ready: its search tabs and sources count now
+  });
+  if (!known) { route(); return; }  // a plugin that is not on the page yet (installed elsewhere): draw the list once
+  if (view.querySelector('[data-plugin-busy="1"]')) setTimeout(() => pollBusyPlugins(my), 3000);
 }
 
 const randomPw = () => {
@@ -1467,6 +1488,8 @@ $('#searchBack').onclick = () => {
 };
 async function viewSearch(my, params) {
   setHeaders(true);
+  await refreshSources();
+  if (my !== S.nav) return;
   const q = (params.get('q') || '').trim();
   const extra = S.categories || [];  // plugin categories (live radio, podcasts, ...): shown like songs, results from that plugin only
   const asked = params.get('kind');
@@ -3091,7 +3114,11 @@ async function showNews() {
   } catch (_) { /* news are an extra */ }
 }
 
+let _srcAt = 0;
+// Plugins can be installed, started or removed while the page is open: look at the sources and search tabs again when the search opens.
+async function refreshSources(maxAgeMs = 3000) { if (Date.now() - _srcAt > maxAgeMs) await loadSources(); }
 async function loadSources() {
+  _srcAt = Date.now();
   try {
     const { sources } = await api('/sources');
     S.sources = Object.fromEntries(sources.map((s) => [s.id, s.name]));
