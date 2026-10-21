@@ -142,19 +142,23 @@ Plugins run with the rights of the server: only install plugins you trust.
 ## Roadmap
 
 **Now**
-- First public release (0.1.0) and feedback on the alpha features.
+- First public release and feedback on the alpha features.
 
 **Next**
+- 📚 **Multiple libraries**: several music folders on one server (for example "Music", "Audiobooks", "Kids"), each scanned on its own, with a choice of which users see which library.
+- ✏️ **Fix metadata matches**: mark a wrong MusicBrainz match, paste the right MusicBrainz link, or look up a single album or artist again.
+- 🔍 **See what enrichment did**: the admin area lists what was found, what was not and why, and shows a running lookup as it happens.
+- 🧩 **More plugins**, for example podcasts, and a **directory of community plugins**.
 - 🍏 **iOS app**: built and being tested; release via TestFlight and the App Store.
-- 🌐 **Project website** (nxtsound.app) with a tour, the docs and a live demo.
-- 🌍 **More languages**: the app speaks English and German today; every new language is one translation file ([how](docs/developer-guide.md#translations)).
 
 **Later**
+- 🌐 **Project website** (nxtsound.app) with a tour, the docs and a live demo.
 - 🤖 **Android app**: wanted, and a great place to [contribute](#contributing).
 - 🚗 **CarPlay and Android Auto**: depends on the native apps above.
-- 📚 **Multiple libraries**: connect several music folders to one server.
 - 🖥 **Desktop app** for Mac, Windows and Linux.
-- 🧩 **More plugins**, for example podcasts, and a **directory of community plugins**.
+
+**long-running refinement**
+- 🌍 **More languages**: the app speaks English and German today; every new language is one translation file ([how](docs/developer-guide.md#translations)).
 
 Have an idea? Open an issue.
 
