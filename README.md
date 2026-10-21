@@ -157,7 +157,7 @@ Plugins run with the rights of the server: only install plugins you trust.
 - 🚗 **CarPlay and Android Auto**: depends on the native apps above.
 - 🖥 **Desktop app** for Mac, Windows and Linux.
 
-**long-running refinement**
+**Long-running refinement**
 - 🌍 **More languages**: the app speaks English and German today; every new language is one translation file ([how](docs/developer-guide.md#translations)).
 
 Have an idea? Open an issue.
