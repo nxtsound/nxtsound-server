@@ -292,6 +292,8 @@ have to release for every fix.
 | **stable** | `v0.2.0` | builds the image (`0.2.0`, `0.2`, `latest`) and prepares a **draft** release with the notes from `CHANGELOG.md` |
 | **beta** | `v0.2.0-beta.1` | builds the image (`0.2.0-beta.1`, `beta`; `latest` does not move) and **publishes a pre-release** with the notes |
 
+**The version of an image comes from the tag**: the workflow passes it to the build, so `v0.2.0-beta.1` reports `0.2.0-beta.1` and `v0.2.0` reports `0.2.0`. The `VERSION` file in the repository is what a server run from source reports; keep it at the latest *stable* version.
+
 Servers decide what to announce from GitHub's releases: the *stable* channel looks at the newest **published** release that is not a pre-release,
 the *beta* channel at the newest of all releases including pre-releases (a stable `0.2.0` is newer than its own `0.2.0-beta.2`). Only if a repository has no releases at all, tags are used instead.
 
@@ -302,7 +304,7 @@ the *beta* channel at the newest of all releases including pre-releases (a stabl
 4. Wait for the **Release** workflow (the image takes 10 to 20 minutes), then open Releases, check the draft (the notes come from the changelog) and press **Publish release**.
 5. Check: `docker pull ghcr.io/nxtsound/nxtsound-server:0.2.0`, and on a server with the old version "Check for updates" shows the new one.
 
-**Beta release:** the same, but tag `v0.2.0-beta.1` on `main` (no `VERSION` change is needed for testers who run the image; set `VERSION` in the pull request if you want the server to report the beta number). The pre-release is published at once.
+**Beta release:** tag `v0.2.0-beta.1` on `main` (no pull request is needed just for the tag, and `VERSION` stays as it is). The pre-release is published at once; its notes are the changelog section of the version it leads to (`## [0.2.0]`) or, if that does not exist yet, `## [Unreleased]`.
 Several betas can lead to one stable release; bundle fixes this way instead of releasing for each of them.
 
 **Hotfix:** if something is badly broken, fix it on `main` and cut a patch release (`v0.2.1`) right away.

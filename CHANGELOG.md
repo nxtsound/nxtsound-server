@@ -5,6 +5,8 @@ minor versions may contain breaking changes, which are called out.
 
 ## [Unreleased]
 
+## [0.2.0] – 2026-10-21
+
 ### Added
 - **Update channels:** Admin area → System → Updates lets you choose *stable* (tested releases, default) or *beta* (also pre-releases such as `0.2.0-beta.1`). `UPDATE_CHANNEL` sets the default.
 - The update window shows both ways to update (ready-made image and built from the source) and says when it is a pre-release.
@@ -13,6 +15,7 @@ minor versions may contain breaking changes, which are called out.
 ### Changed
 - Versions are compared like semantic versioning (`0.2.0-beta.2` is newer than `-beta.1` and older than `0.2.0`).
 - The release notes in the update window scroll after about 15 lines.
+- Docker images report the version of the tag they were built for (`0.2.0-beta.1`), so a beta never announces itself as an update.
 
 ## [0.1.1] – 2026-10-21
 

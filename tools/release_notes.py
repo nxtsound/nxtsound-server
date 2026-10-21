@@ -1,7 +1,7 @@
 """Prints the release notes for a version tag from CHANGELOG.md (the release workflow puts them into the GitHub release).
 
     python tools/release_notes.py v0.2.0            the section "## [0.2.0]"
-    python tools/release_notes.py v0.2.0-beta.1     its own section, else what is waiting under "## [Unreleased]"
+    python tools/release_notes.py v0.2.0-beta.1     its own section, else the section of the version it leads to ("## [0.2.0]"), else "## [Unreleased]"
 
 Prints nothing if there are no notes (the workflow then lets GitHub generate them from the merged pull requests).
 """
@@ -20,8 +20,8 @@ def notes(tag: str, changelog: str) -> str:
             sections[m.group(1)] = body.strip()
     if sections.get(version):
         return sections[version]
-    if "-" in version:  # a pre-release has no section of its own: what is waiting for the next release
-        return sections.get("Unreleased", "")
+    if "-" in version:  # a pre-release has no section of its own: what the final version will bring
+        return sections.get(version.split("-")[0]) or sections.get("Unreleased", "")
     return ""
 
 
