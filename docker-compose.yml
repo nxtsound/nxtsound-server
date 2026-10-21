@@ -15,6 +15,7 @@ services:
       SESSION_DAYS: "${SESSION_DAYS:-30}"
       SESSION_MAX_DAYS: "${SESSION_MAX_DAYS:-180}"
       UPDATE_REPO: "${UPDATE_REPO:-nxtsound/nxtsound-server}"
+      UPDATE_CHANNEL: "${UPDATE_CHANNEL:-stable}"
       UPDATE_CHECK_HOURS: "${UPDATE_CHECK_HOURS:-6}"
       DISK_WARN_GB: "${DISK_WARN_GB:-1}"
       DISK_WARN_PERCENT: "${DISK_WARN_PERCENT:-10}"

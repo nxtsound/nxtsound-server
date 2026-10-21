@@ -411,7 +411,7 @@ def _render_notification(n: dict) -> dict:
         body = tr("Version {version}", version=d["version"]) if d.get("version") else tr("A newer version is in the repository")
         nav = "#/admin/plugins"
     elif kind == "server_update":
-        title = tr("Server update available: {version}", version=d.get("latest", ""))
+        title = tr("Beta available: {version}", version=d.get("latest", "")) if d.get("prerelease") else tr("Server update available: {version}", version=d.get("latest", ""))
         body = tr("This server runs {current}.", current=d.get("current", ""))
         nav = "#/admin/system"
     elif kind == "follow":
@@ -997,6 +997,19 @@ async def admin_plugin_check_update(plugin_id: str):
 @admin.get("/updates")
 def admin_updates():
     """Versions: the server (from GitHub, if UPDATE_REPO is set) and the plugins installed from a repository."""
+    return sysmon.snapshot()
+
+
+class ChannelIn(BaseModel):
+    channel: Literal["stable", "beta"]
+
+
+@admin.put("/updates/channel")
+async def admin_updates_channel(body: ChannelIn):
+    """Which versions are announced: stable (releases) or beta (also pre-releases). Looks again at once."""
+    sysmon.set_channel(body.channel)
+    log.info("Update channel set to %s", body.channel)
+    await asyncio.to_thread(sysmon.check_server_update)
     return sysmon.snapshot()
 
 

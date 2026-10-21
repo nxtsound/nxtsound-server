@@ -1,14 +1,17 @@
 name: Release
 
-# A tag like v0.1.0 builds the Docker image (ghcr.io/<owner>/nxtsound-server). The server's update check follows the tags; create a
-# GitHub release for a tag (Releases → Draft a new release) to mark that version as stable and to give it release notes.
+# Releases are cut by tags (the project is trunk-based: `main` is the only long-lived branch; merging publishes nothing).
+#   v0.2.0         stable: builds the image (tags 0.2.0, 0.2, latest) and prepares a DRAFT release with the notes from CHANGELOG.md.
+#                  Check the notes and press "Publish": only a published release counts as stable for the servers' update check.
+#   v0.2.0-beta.1  beta: builds the image (tags 0.2.0-beta.1, beta; "latest" does not move) and publishes a PRE-RELEASE with the notes.
+#                  Servers on the beta channel are told about it.
 on:
   push:
     tags: ["v*"]
 
 permissions:
-  contents: read
-  packages: write
+  contents: write   # creates the release
+  packages: write   # pushes the image
 
 jobs:
   image:
@@ -26,10 +29,11 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
+          flavor: latest=auto   # "latest" only for stable versions, never for a pre-release
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+            type=raw,value=beta,enable=${{ contains(github.ref_name, '-') }}
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -38,3 +42,14 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: GIT_COMMIT=${{ github.sha }}
+      - name: Release notes from CHANGELOG.md
+        id: notes
+        run: |
+          python3 tools/release_notes.py "$GITHUB_REF_NAME" > release-notes.md
+          if [ -s release-notes.md ]; then echo "found=true" >> "$GITHUB_OUTPUT"; else echo "found=false" >> "$GITHUB_OUTPUT"; fi
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: ${{ steps.notes.outputs.found == 'true' && 'release-notes.md' || '' }}
+          generate_release_notes: ${{ steps.notes.outputs.found != 'true' }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          draft: ${{ !contains(github.ref_name, '-') }}

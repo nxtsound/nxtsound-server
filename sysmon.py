@@ -21,11 +21,14 @@ log = logging.getLogger("server")
 
 DEFAULT_REPO = "nxtsound/nxtsound-server"  # the project's public repository: its newest release (or, before there is one, its newest tag) is the newest version
 UPDATE_REPO = os.getenv("UPDATE_REPO", DEFAULT_REPO).strip()  # "owner/repo" of a fork; empty = do not look
+CHANNELS = ("stable", "beta")  # stable: the newest release; beta: also pre-releases (v0.2.0-beta.1)
+UPDATE_CHANNEL = os.getenv("UPDATE_CHANNEL", "stable").strip().lower()  # the default; the admin's choice (stored in the database) wins
 UPDATE_CHECK_HOURS = float(os.getenv("UPDATE_CHECK_HOURS", "6"))  # how often to look for new versions of the server and the plugins; 0 = never
 DISK_WARN_GB = float(os.getenv("DISK_WARN_GB", "1"))  # warn below this much free space ...
 DISK_WARN_PERCENT = float(os.getenv("DISK_WARN_PERCENT", "10"))  # ... or below this share
 DISK_EVERY = 1800  # seconds between two looks at the disks
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$")
+CHANNEL_SETTING = "update_channel"
 SETTING = "server_update"  # the last answer about the server version, kept so the admin area has it right after a restart
 NOTES_MAX = 4000
 
@@ -39,8 +42,28 @@ def set_transport(transport) -> None:
 
 
 def version_tuple(v: str) -> tuple[int, ...]:
-    """'v0.2.10-rc1' -> (0, 2, 10). Only the numbers of the first part count."""
+    """'v0.2.10-rc1' -> (0, 2, 10). Only the numbers of the first part count (see version_key for the full order)."""
     return tuple(int(x) for x in re.findall(r"\d+", (v or "").split("-")[0].lstrip("vV"))) or (0,)
+
+
+_VERSION = re.compile(r"^[vV]?(\d+(?:\.\d+)*)(?:-([0-9A-Za-z.-]+))?(?:\+.*)?$")
+
+
+def version_key(v: str) -> tuple:
+    """A sortable key following semantic versioning: 0.2.0-beta.1 < 0.2.0-beta.2 < 0.2.0 < 0.2.1. Text that is no version sorts lowest."""
+    m = _VERSION.match((v or "").strip())
+    if not m:
+        return ((0, 0, 0, 0), (0, ()))
+    nums = tuple(int(x) for x in m.group(1).split("."))
+    nums = nums + (0,) * (4 - len(nums)) if len(nums) < 4 else nums
+    if not m.group(2):
+        return (nums, (1, ()))  # a release comes after all its pre-releases
+    return (nums, (0, tuple((0, int(p), "") if p.isdigit() else (1, 0, p) for p in m.group(2).split("."))))
+
+
+def is_prerelease(v: str) -> bool:
+    m = _VERSION.match((v or "").strip())
+    return bool(m and m.group(2))
 
 
 def current_version() -> str:
@@ -48,49 +71,83 @@ def current_version() -> str:
     return main.VERSION_INFO["version"]
 
 
+def channel() -> str:
+    """The update channel: the admin's choice, else UPDATE_CHANNEL, else stable."""
+    for c in (db.get_setting(CHANNEL_SETTING, ""), UPDATE_CHANNEL):
+        if c in CHANNELS:
+            return c
+    return "stable"
+
+
+def set_channel(value: str) -> None:
+    if value not in CHANNELS:
+        raise ValueError(value)
+    db.set_setting(CHANNEL_SETTING, value)
+    _state["server"] = None  # the last answer belongs to the other channel
+    db.set_setting(SETTING, "")
+
+
 # ---------- Server version on GitHub ----------
 
-def latest_release(repo: str) -> dict | None:
-    """The newest release of a GitHub repository: {"version", "tag", "notes", "url"}; without releases the newest tag; None if there is nothing."""
+def _release(d: dict) -> dict:
+    tag = str(d.get("tag_name") or "")
+    return {"version": tag.lstrip("vV"), "tag": tag, "notes": str(d.get("body") or "")[:NOTES_MAX], "url": str(d.get("html_url") or ""), "prerelease": bool(d.get("prerelease")) or is_prerelease(tag)}
+
+
+def latest_release(repo: str, channel: str = "stable") -> dict | None:
+    """The newest version on GitHub for a channel: {"version", "tag", "notes", "url", "prerelease"}, or None if there is nothing.
+
+    stable: the newest release that is not a pre-release (GitHub's "latest"); without any release, the newest tag without a pre-release suffix.
+    beta: the newest of all releases including pre-releases; without any release, the newest tag.
+    """
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "nxtsound-server", "X-GitHub-Api-Version": "2022-11-28"}
+    beta = channel == "beta"
     with httpx.Client(timeout=10, headers=headers, follow_redirects=True, **({"transport": _transport} if _transport else {})) as c:
-        r = c.get(f"https://api.github.com/repos/{repo}/releases/latest")
-        if r.status_code == 200:
-            d = r.json()
-            tag = str(d.get("tag_name") or "")
-            return {"version": tag.lstrip("vV"), "tag": tag, "notes": str(d.get("body") or "")[:NOTES_MAX], "url": str(d.get("html_url") or f"https://github.com/{repo}/releases")}
-        if r.status_code == 404:  # no release yet: look at the tags
-            t = c.get(f"https://api.github.com/repos/{repo}/tags", params={"per_page": 20})
-            if t.status_code == 200 and t.json():
-                tags = sorted((x["name"] for x in t.json() if re.search(r"\d", x.get("name", ""))), key=version_tuple, reverse=True)
-                if tags:
-                    return {"version": tags[0].lstrip("vV"), "tag": tags[0], "notes": "", "url": f"https://github.com/{repo}/releases/tag/{tags[0]}"}
-            return None
-        r.raise_for_status()
+        if beta:
+            r = c.get(f"https://api.github.com/repos/{repo}/releases", params={"per_page": 30})
+            if r.status_code == 200:
+                found = [_release(x) for x in r.json() if not x.get("draft") and re.search(r"\d", str(x.get("tag_name") or ""))]
+                if found:
+                    return max(found, key=lambda x: version_key(x["version"]))
+            elif r.status_code != 404:
+                r.raise_for_status()
+        else:
+            r = c.get(f"https://api.github.com/repos/{repo}/releases/latest")
+            if r.status_code == 200:
+                d = r.json()
+                return {**_release(d), "url": str(d.get("html_url") or f"https://github.com/{repo}/releases")}
+            if r.status_code != 404:
+                r.raise_for_status()
+        t = c.get(f"https://api.github.com/repos/{repo}/tags", params={"per_page": 50})  # no release (yet): look at the tags
+        if t.status_code == 200 and t.json():
+            names = [x["name"] for x in t.json() if re.search(r"\d", x.get("name", "")) and (beta or not is_prerelease(x["name"]))]
+            if names:
+                best = max(names, key=version_key)
+                return {"version": best.lstrip("vV"), "tag": best, "notes": "", "url": f"https://github.com/{repo}/releases/tag/{best}", "prerelease": is_prerelease(best)}
     return None
 
 
 def check_server_update() -> dict:
-    """Asks GitHub whether a newer server version exists; stores and returns {"enabled", "current", "latest", "available", ...}."""
-    cur = current_version()
-    out = {"enabled": bool(UPDATE_REPO and REPO_RE.match(UPDATE_REPO)), "repo": UPDATE_REPO, "current": cur, "available": False, "latest": "", "notes": "", "url": "", "checked": time.time()}
+    """Asks GitHub whether a newer server version exists (in the chosen channel); stores and returns {"enabled", "current", "latest", "available", ...}."""
+    cur, ch = current_version(), channel()
+    out = {"enabled": bool(UPDATE_REPO and REPO_RE.match(UPDATE_REPO)), "repo": UPDATE_REPO, "channel": ch, "current": cur, "available": False, "latest": "", "notes": "", "url": "", "prerelease": False, "checked": time.time()}
     if not UPDATE_REPO or not REPO_RE.match(UPDATE_REPO):
         _state["server"] = out
         return out
     try:
-        rel = latest_release(UPDATE_REPO)
+        rel = latest_release(UPDATE_REPO, ch)
         _state["server_error"] = ""
     except (httpx.HTTPError, ValueError) as e:
         _state["server_error"] = e.__class__.__name__
         log.info("Looking for a new server version failed: %s", e.__class__.__name__)
         return snapshot()["server"]
     if rel:
-        out.update(latest=rel["version"], notes=rel["notes"], url=rel["url"], available=version_tuple(rel["version"]) > version_tuple(cur))
+        out.update(latest=rel["version"], notes=rel["notes"], url=rel["url"], prerelease=rel["prerelease"], available=version_key(rel["version"]) > version_key(cur))
     _state["server"] = out
     _state["server_checked"] = out["checked"]
     db.set_setting(SETTING, json.dumps(out))
     if out["available"]:
-        db.notify(db.SYSTEM, "server_update", "server_update", {"current": cur, "latest": out["latest"], "url": out["url"]})
+        db.notify(db.SYSTEM, "server_update", "server_update", {"current": cur, "latest": out["latest"], "url": out["url"], "prerelease": out["prerelease"]})
     else:
         db.resolve_notification(db.SYSTEM, "server_update")
     return out
@@ -168,11 +225,11 @@ def snapshot() -> dict:
             server = json.loads(db.get_setting(SETTING, "")) or None
         except ValueError:
             server = None
-    server = dict(server or {"enabled": bool(UPDATE_REPO), "repo": UPDATE_REPO, "available": False, "latest": "", "notes": "", "url": "", "checked": 0})
-    server.update(current=current_version(), enabled=bool(UPDATE_REPO and REPO_RE.match(UPDATE_REPO)), repo=UPDATE_REPO, error=_state["server_error"])
+    server = dict(server or {"enabled": bool(UPDATE_REPO), "repo": UPDATE_REPO, "available": False, "latest": "", "notes": "", "url": "", "prerelease": False, "checked": 0})
+    server.update(current=current_version(), channel=channel(), enabled=bool(UPDATE_REPO and REPO_RE.match(UPDATE_REPO)), repo=UPDATE_REPO, error=_state["server_error"])
     if server["latest"]:
-        server["available"] = version_tuple(server["latest"]) > version_tuple(server["current"])
-    return {"server": server, "plugins": dict(pluginhost.UPDATES), "check_hours": UPDATE_CHECK_HOURS}
+        server["available"] = version_key(server["latest"]) > version_key(server["current"])
+    return {"server": server, "plugins": dict(pluginhost.UPDATES), "check_hours": UPDATE_CHECK_HOURS, "channels": list(CHANNELS)}
 
 
 async def loop() -> None:

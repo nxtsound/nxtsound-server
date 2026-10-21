@@ -969,11 +969,17 @@ function pluginUpdateSheet(id, u) {
 }
 
 function serverUpdateSheet(s) {
-  openSheet(`<div class="sh-title">${esc(tr('Server update available: {version}', { version: s.latest }))}</div>
+  const tag = 'v' + s.latest;
+  openSheet(`<div class="sh-title">${esc(s.prerelease ? tr('Beta available: {version}', { version: s.latest }) : tr('Server update available: {version}', { version: s.latest }))}</div>
     <div class="upd-info"><div class="dim small">${esc(tr('This server runs {current}.', { current: s.current }))}</div>
     <h4>${esc(tr('Release notes'))}</h4>
     ${s.notes ? `<pre class="notes">${esc(s.notes)}</pre>` : `<div class="dim small">${esc(tr('No release notes.'))}</div>`}
-    <p class="dim small" style="margin:12px 0 0">${esc(tr('To update, fetch the new version on the server and rebuild the container (git pull, then docker compose up -d --build).'))}</p></div>
+    <h4>${esc(tr('How to update'))}</h4>
+    <div class="dim small">${esc(tr('With the ready-made image'))}</div>
+    <pre class="cmdbox">docker compose pull\ndocker compose up -d</pre>
+    <div class="dim small">${esc(tr('Built from the source'))}</div>
+    <pre class="cmdbox">git fetch --tags\ngit checkout ${esc(tag)}\ndocker compose up -d --build</pre>
+    <p class="dim small" style="margin:6px 0 0">${esc(s.prerelease ? tr('This is a pre-release for testing. With the image, use the tag :beta (ghcr.io/nxtsound/nxtsound-server:beta).') : tr('The checkout gives you exactly the released version; “git pull” alone would give you the newest development state, which can be ahead of the release.'))}</p></div>
     <div class="actions">${s.url ? `<a class="btn" href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(tr('Open the release page'))}</a>` : ''}<button class="btn sec" data-close>${esc(tr('Close'))}</button></div>`);
 }
 
@@ -1112,6 +1118,9 @@ function updatesCard(up) {
     : s.latest ? `<span class="st-ok">${esc(tr('Up to date'))}</span>` : `<span class="dim">${esc(tr('Not checked yet'))}</span>`;
   return `<section class="acard"><div class="phead2"><h3>${esc(tr('Updates'))}</h3><span class="grow"></span><button class="pbtn" data-act="updatesCheck">${IC.refresh}<span>${esc(tr('Check for updates'))}</span></button></div>
     <div class="sub" style="margin:0 0 8px">${esc(tr('Server'))} <b>${esc(s.current)}</b> ${state}</div>
+    <div class="sub" style="margin:0 0 4px"><label for="updChannel">${esc(tr('Updates from'))}</label>
+      <select id="updChannel" class="langsel"><option value="stable"${s.channel === 'stable' ? ' selected' : ''}>${esc(tr('Stable'))}</option><option value="beta"${s.channel === 'beta' ? ' selected' : ''}>${esc(tr('Beta'))}</option></select></div>
+    <p class="dim small" style="margin:0 0 8px">${esc(tr('Stable: tested releases (recommended). Beta: also test versions, before they are released as stable.'))}</p>
     <p class="dim small" style="margin:0">${s.checked ? esc(tr('Last checked {when}', { when: ago(s.checked) })) + ' · ' : ''}${up.check_hours ? esc(tr('The server looks every {n} h.', { n: up.check_hours })) : esc(tr('Automatic checks are off (UPDATE_CHECK_HOURS=0).'))}
     ${s.error ? ' · ' + esc(tr('Last attempt failed: {why}', { why: s.error })) : ''}</p></section>`;
 }
@@ -1656,6 +1665,10 @@ document.addEventListener('change', async (e) => {
       await loadSources();
       route();
     } catch (er) { toast(er.message, 6000, true); }
+    return;
+  }
+  if (e.target.id === 'updChannel') {  // update channel in the admin area
+    try { await api('/admin/updates/channel', { method: 'PUT', json: { channel: e.target.value } }); toast(tr('Saved')); route(); } catch (er) { toast(er.message, 3000, true); }
     return;
   }
   if (e.target.id === 'langSel') {  // language choice on the account page

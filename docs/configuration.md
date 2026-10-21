@@ -63,6 +63,7 @@ Settings marked **admin area** can also be changed at runtime there, and the adm
 | Variable | Default | Meaning |
 |---|---|---|
 | `UPDATE_REPO` | `nxtsound/nxtsound-server` | The GitHub repository whose newest release (or, if it has none, newest tag) counts as the newest server version. Change it only for a fork. |
+| `UPDATE_CHANNEL` | `stable` | `stable` announces tested releases only; `beta` also announces pre-releases (test versions such as `0.2.0-beta.1`). This is the default; the admin's choice in Admin area → System → Updates wins. |
 | `UPDATE_CHECK_HOURS` | `6` | How often the server looks for newer versions of itself and of plugins installed from a repository. `0` = never (no request to GitHub at all). |
 | `DISK_WARN_GB` | `1` | Warn the admins when the free space of the data or music disk is below this. |
 | `DISK_WARN_PERCENT` | `10` | ... or below this share of the disk. |
