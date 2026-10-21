@@ -13,6 +13,10 @@ COPY --chown=app:app requirements.txt .
 RUN pip install --no-cache-dir --user -r requirements.txt
 COPY --chown=app:app . .
 
+# The release workflow passes the version of the tag (0.2.0, 0.2.0-beta.1): the image reports exactly the version it was built for
+ARG VERSION=""
+RUN if [ -n "$VERSION" ]; then echo "$VERSION" > VERSION; fi
+
 # The entrypoint runs as root for a moment (fixes the owner of mounted folders), then continues as the app user
 USER root
 

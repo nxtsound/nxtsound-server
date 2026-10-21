@@ -30,9 +30,10 @@ def test_a_release_gets_its_own_section():
     assert rn.notes("0.1.0", LOG) == "- the first"
 
 
-def test_a_pre_release_without_a_section_gets_what_is_unreleased():
-    assert rn.notes("v0.3.0-beta.1", LOG) == "### Added\n- waiting for the next release"
-    assert rn.notes("v0.2.0-beta.1", LOG).startswith("### Added")  # its own section does not exist yet, the final one is not it
+def test_a_pre_release_gets_the_notes_of_the_version_it_leads_to_else_what_is_unreleased():
+    assert rn.notes("v0.2.0-beta.1", LOG) == "### Fixed\n- something"  # 0.2.0 is already written down
+    assert rn.notes("v0.3.0-beta.1", LOG) == "### Added\n- waiting for the next release"  # 0.3.0 is not: what is waiting
+    assert rn.notes("v0.2.0-beta.1", LOG.replace("## [0.2.0]", "## [0.2.0-beta.1]")) == "### Fixed\n- something"  # its own section wins
 
 
 def test_a_release_without_a_section_gets_nothing_so_github_can_generate_notes():
