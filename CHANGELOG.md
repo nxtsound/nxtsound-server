@@ -5,6 +5,8 @@ minor versions may contain breaking changes, which are called out.
 
 ## [Unreleased]
 
+## [0.1.1] – 2026-10-21
+
 ### Fixed
 - A plugin's search tabs (for example "Live radio") did not appear after installing, enabling or updating the plugin until the page was reloaded: sources and tabs are now looked up again when the search opens and when a plugin has finished starting.
 - While a plugin was being installed, the admin page redrew itself completely every three seconds (losing what you had typed). Now only the plugin's own card is refreshed.
