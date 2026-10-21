@@ -5,6 +5,15 @@ minor versions may contain breaking changes, which are called out.
 
 ## [Unreleased]
 
+### Added
+- **Update channels:** Admin area → System → Updates lets you choose *stable* (tested releases, default) or *beta* (also pre-releases such as `0.2.0-beta.1`). `UPDATE_CHANNEL` sets the default.
+- The update window shows both ways to update (ready-made image and built from the source) and says when it is a pre-release.
+- Release workflow: a version tag builds the image; a stable tag prepares a draft release with the notes from this changelog, a beta tag (`v0.2.0-beta.1`) publishes a pre-release and the image tag `beta`. `latest` only ever points to stable.
+
+### Changed
+- Versions are compared like semantic versioning (`0.2.0-beta.2` is newer than `-beta.1` and older than `0.2.0`).
+- The release notes in the update window scroll after about 15 lines.
+
 ## [0.1.1] – 2026-10-21
 
 ### Fixed

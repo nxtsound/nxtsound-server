@@ -62,12 +62,14 @@ def test_one_disk_is_looked_at_once(monkeypatch, tmp_path):
 
 # ---------- Server version ----------
 
-def github(release: dict | None = None, tags: list | None = None, status: int = 200):
+def github(release: dict | None = None, tags: list | None = None, status: int = 200, releases: list | None = None):
     calls = []
 
     def handler(req: httpx.Request) -> httpx.Response:
         calls.append(str(req.url))
         assert req.headers["user-agent"] == "nxtsound-server"
+        if req.url.path.endswith("/releases") and releases is not None:  # the list (beta channel)
+            return httpx.Response(status, json=releases)
         if req.url.path.endswith("/releases/latest"):
             return httpx.Response(status, json=release) if release is not None else httpx.Response(404 if status == 200 else status)
         if req.url.path.endswith("/tags"):
@@ -82,6 +84,7 @@ def github(release: dict | None = None, tags: list | None = None, status: int = 
 @pytest.fixture()
 def repo(monkeypatch):
     monkeypatch.setattr(sysmon, "UPDATE_REPO", "nxtsound/nxtsound-server")
+    monkeypatch.setattr(sysmon, "UPDATE_CHANNEL", "stable")
     monkeypatch.setattr(sysmon, "_state", {"server": None, "plugins_checked": 0.0, "server_checked": 0.0, "server_error": ""})
     yield
     sysmon.set_transport(None)
@@ -90,6 +93,14 @@ def repo(monkeypatch):
 def test_version_numbers_are_compared_by_their_numbers():
     v = sysmon.version_tuple
     assert v("v0.2.10") > v("0.2.9") > v("0.2") and v("1.0.0-rc1") == (1, 0, 0) and v("2026.10.01") > v("2026.9.30") and v("junk") == (0,)
+
+
+def test_versions_are_ordered_like_semantic_versioning():
+    k = sysmon.version_key
+    order = ["0.1.0", "0.2.0-alpha", "0.2.0-beta.1", "0.2.0-beta.2", "0.2.0-beta.10", "0.2.0-rc.1", "0.2.0", "0.2.1", "0.10.0", "1.0.0"]
+    assert [x for x in sorted(reversed(order), key=k)] == order
+    assert k("v0.2") == k("0.2.0") and k("0.2.0+build5") == k("0.2.0") and k("junk") < k("0.0.1")
+    assert sysmon.is_prerelease("0.2.0-beta.1") and not sysmon.is_prerelease("0.2.0") and not sysmon.is_prerelease("v1")
 
 
 def test_a_newer_release_is_announced_to_admins(admin, repo):
@@ -244,3 +255,75 @@ def test_the_plugin_log_is_limited_and_forgotten_on_removal(admin):
 
 def test_default_repository_is_the_public_project():
     assert sysmon.DEFAULT_REPO == "nxtsound/nxtsound-server" and sysmon.REPO_RE.match(sysmon.DEFAULT_REPO)
+
+
+# ---------- Channels: stable and beta ----------
+
+RELEASES = [
+    {"tag_name": "v0.2.0-beta.2", "prerelease": True, "draft": False, "body": "beta two", "html_url": "https://x/beta2"},
+    {"tag_name": "v0.2.0-beta.1", "prerelease": True, "draft": False, "body": "beta one", "html_url": "https://x/beta1"},
+    {"tag_name": "v0.1.1", "prerelease": False, "draft": False, "body": "stable", "html_url": "https://x/011"},
+    {"tag_name": "v0.3.0", "prerelease": False, "draft": True, "body": "not published yet", "html_url": "https://x/draft"},
+]
+
+
+def test_stable_is_the_default_and_ignores_pre_releases(admin, repo):
+    assert sysmon.channel() == "stable"
+    t = github({"tag_name": "v0.1.1", "body": "stable", "html_url": "https://x/011", "prerelease": False}, releases=RELEASES)
+    sysmon.set_transport(t)
+    out = sysmon.check_server_update()
+    assert out["latest"] == "0.1.1" and out["channel"] == "stable" and out["prerelease"] is False
+    assert any(c.endswith("/releases/latest") for c in t.calls) and not any(c.split("?")[0].endswith("/releases") for c in t.calls)
+
+
+def test_beta_takes_the_highest_version_including_pre_releases_but_no_drafts(admin, repo, monkeypatch):
+    monkeypatch.setattr(main, "VERSION_INFO", {"version": "0.1.1", "commit": ""})
+    sysmon.set_transport(github(releases=RELEASES))
+    sysmon.set_channel("beta")
+    out = sysmon.check_server_update()
+    assert out["latest"] == "0.2.0-beta.2" and out["prerelease"] is True and out["available"] and out["notes"] == "beta two" and out["channel"] == "beta"
+    n = admin.get("/api/notifications").json()["items"][0]
+    assert n["title"] == "Beta available: 0.2.0-beta.2"
+    assert admin.get("/api/notifications", headers={"Accept-Language": "de"}).json()["items"][0]["title"] == "Beta verfügbar: 0.2.0-beta.2"
+
+
+def test_a_stable_release_beats_its_own_betas(admin, repo, monkeypatch):
+    monkeypatch.setattr(main, "VERSION_INFO", {"version": "0.2.0-beta.2", "commit": ""})
+    sysmon.set_channel("beta")
+    sysmon.set_transport(github(releases=[{"tag_name": "v0.2.0", "prerelease": False, "draft": False, "body": "", "html_url": "https://x"}] + RELEASES))
+    assert sysmon.check_server_update()["latest"] == "0.2.0" and sysmon.check_server_update()["available"]
+    sysmon.set_transport(github(releases=RELEASES))  # nothing newer than the beta that is installed
+    assert sysmon.check_server_update()["available"] is False and system_keys() == []
+
+
+def test_tags_without_a_release_follow_the_channel(admin, repo):
+    tags = [{"name": "v0.3.0"}, {"name": "v0.4.0-beta.1"}, {"name": "v0.2.0"}]
+    sysmon.set_transport(github(release=None, tags=tags))
+    assert sysmon.check_server_update()["latest"] == "0.3.0"  # stable: a tag with a pre-release suffix does not count
+    sysmon.set_channel("beta")
+    sysmon.set_transport(github(releases=[], tags=tags))
+    out = sysmon.check_server_update()
+    assert out["latest"] == "0.4.0-beta.1" and out["prerelease"] is True
+
+
+def test_the_admin_switches_the_channel_and_the_check_runs_again(admin, bob, repo):
+    sysmon.set_transport(github({"tag_name": "v9.0.0", "body": "", "html_url": "https://x", "prerelease": False}, releases=[{"tag_name": "v9.1.0-beta.1", "prerelease": True, "draft": False, "body": "b", "html_url": "https://x/b"}]))
+    assert bob.put("/api/admin/updates/channel", json={"channel": "beta"}).status_code == 403
+    assert admin.put("/api/admin/updates/channel", json={"channel": "nightly"}).status_code == 422
+    r = admin.put("/api/admin/updates/channel", json={"channel": "beta"}).json()
+    assert r["server"]["channel"] == "beta" and r["server"]["latest"] == "9.1.0-beta.1" and r["channels"] == ["stable", "beta"]
+    assert admin.get("/api/admin/updates").json()["server"]["channel"] == "beta"
+    r = admin.put("/api/admin/updates/channel", json={"channel": "stable"}).json()  # back: the beta notice goes, the stable one stays
+    assert r["server"]["channel"] == "stable" and r["server"]["latest"] == "9.0.0" and r["server"]["prerelease"] is False and system_keys() == ["server_update"]
+    assert admin.get("/api/notifications").json()["items"][0]["title"] == "Server update available: 9.0.0"
+
+
+def test_the_environment_sets_the_default_channel_and_garbage_means_stable(admin, monkeypatch):
+    monkeypatch.setattr(sysmon, "UPDATE_CHANNEL", "beta")
+    assert sysmon.channel() == "beta"
+    sysmon.set_channel("stable")  # the admin's choice wins
+    assert sysmon.channel() == "stable"
+    db.set_setting(sysmon.CHANNEL_SETTING, "nightly")
+    assert sysmon.channel() == "beta"  # an unknown value is ignored: the environment's default applies
+    monkeypatch.setattr(sysmon, "UPDATE_CHANNEL", "bogus")
+    assert sysmon.channel() == "stable"

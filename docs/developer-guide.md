@@ -283,14 +283,28 @@ then add the rendering for the kind in `_render_notification` in `main.py` (titl
 
 ## Releasing
 
-Maintainers only.
+Maintainers only. The project is **trunk-based**: `main` is the only long-lived branch, every change comes in through a pull request (squash merge) and
+`main` always passes CI. **Merging publishes nothing.** A release is made by pushing a **tag**, so you decide when a batch of changes is released, and you do not
+have to release for every fix.
 
+| Channel | Tag | What the workflow does |
+|---|---|---|
+| **stable** | `v0.2.0` | builds the image (`0.2.0`, `0.2`, `latest`) and prepares a **draft** release with the notes from `CHANGELOG.md` |
+| **beta** | `v0.2.0-beta.1` | builds the image (`0.2.0-beta.1`, `beta`; `latest` does not move) and **publishes a pre-release** with the notes |
+
+Servers decide what to announce from GitHub's releases: the *stable* channel looks at the newest **published** release that is not a pre-release,
+the *beta* channel at the newest of all releases including pre-releases (a stable `0.2.0` is newer than its own `0.2.0-beta.2`). Only if a repository has no releases at all, tags are used instead.
+
+**Stable release, step by step**
 1. Make sure `main` is green in CI.
-2. Update `VERSION`, add a section to `CHANGELOG.md`, and add a card to `whatsnew.json` if users should hear about it (English `title`/`text`, German `title_de`/`text_de`; cards show once per user after the update).
-3. Commit, then tag: `git tag v0.2.0 && git push origin main --tags`.
-4. The **Release workflow** builds and publishes the Docker image (`ghcr.io/nxtsound/nxtsound-server`, tags `0.2.0`, `0.2`, `latest`).
-5. On GitHub, create a **release** from the tag (Releases → Draft a new release, "generate release notes", edit, publish).
-   Servers learn about the new version from the newest release, or from the newest tag if there is no release; marking a release makes it clear which version is stable.
-6. Announce it where users are.
+2. In a pull request: set `VERSION`, move the entries under `## [Unreleased]` in `CHANGELOG.md` into a new `## [0.2.0] – date` section, and add a card to `whatsnew.json` if users should hear about it (English `title`/`text`, German `title_de`/`text_de`). Merge it.
+3. Tag the merge commit: `git fetch origin && git tag -a v0.2.0 origin/main -m "NxtSound 0.2.0" && git push origin v0.2.0`.
+4. Wait for the **Release** workflow (the image takes 10 to 20 minutes), then open Releases, check the draft (the notes come from the changelog) and press **Publish release**.
+5. Check: `docker pull ghcr.io/nxtsound/nxtsound-server:0.2.0`, and on a server with the old version "Check for updates" shows the new one.
 
-Versioning: `MAJOR.MINOR.PATCH`. While the version starts with `0.`, minor versions may contain breaking changes; they are listed in the changelog.
+**Beta release:** the same, but tag `v0.2.0-beta.1` on `main` (no `VERSION` change is needed for testers who run the image; set `VERSION` in the pull request if you want the server to report the beta number). The pre-release is published at once.
+Several betas can lead to one stable release; bundle fixes this way instead of releasing for each of them.
+
+**Hotfix:** if something is badly broken, fix it on `main` and cut a patch release (`v0.2.1`) right away.
+
+Versioning: `MAJOR.MINOR.PATCH` with optional `-beta.N`. While the version starts with `0.`, minor versions may contain breaking changes; they are listed in the changelog.

@@ -96,10 +96,15 @@ If you start without them, the login page asks you to create the first account i
 ### Updating
 
 - **Option A (image):** `docker compose pull && docker compose up -d`.
-- **Option B (source):** `cd nxtsound-server && git pull && docker compose up -d --build`.
+- **Option B (source):** `cd nxtsound-server && git fetch --tags && git checkout v0.1.1 && docker compose up -d --build` (use the version the admin area names; the project is developed on `main`, so a plain `git pull` can give you a state that is newer than the last release).
 
 Your data stays in the volume. Open the admin area → System to see the version. The server tells admins when a new version
-exists (the bell), but it never updates itself.
+exists (the bell, and a window with the release notes and both ways to update), but it never updates itself.
+
+**Stable or beta:** In Admin area → System → Updates you choose where updates come from. *Stable* (the default) announces tested releases only.
+*Beta* also announces test versions (`0.2.0-beta.1`, shown as "Beta available") before they are released as stable, so you can try new things early and help finding problems.
+A beta can have bugs; keep a [backup](#backup-and-restore). With the image, a beta is the tag `:beta` (`image: ghcr.io/nxtsound/nxtsound-server:beta`); `:latest` is always the newest stable version.
+Switching the channel only changes what you are told about; the version that runs changes when you update it as described above.
 
 ## Your first login
 
