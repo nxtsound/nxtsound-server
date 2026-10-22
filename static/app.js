@@ -1157,6 +1157,18 @@ function pluginActionSheet(id, pluginName, action) {
   };
 }
 
+// Playing at the same time: how many devices of one account may play at once.
+function streamsCard(st) {
+  const rows = st.playing.map((p) => `<div class="logrow"><span>${esc(p.user)}</span><span class="dim">${esc(trn(p.streams, '{n} stream', '{n} streams'))}</span></div>`).join('');
+  return `<section class="acard"><h3>${esc(tr('Playing at the same time'))}</h3>
+    <form id="streamForm" class="secform">
+      <label>${esc(tr('Streams of one account that may play at once (0 = no limit)'))}<input name="max_streams" type="number" min="0" max="${st.max}" value="${st.max_streams}" required></label>
+      <button class="btn sec" type="submit">${esc(tr('Save'))}</button></form>
+    <h4>${esc(tr('Playing now'))}</h4>
+    ${rows || `<div class="sub" style="margin:0">${esc(tr('Nobody is playing.'))}</div>`}
+    <p class="dim small" style="margin:10px 0 0">${esc(tr('Every player that plays (a browser tab, an app) uses one place of its account, even several in the same login. When the limit is reached, a further player of the account is told so and does not start; the others play on. Pausing or closing the tab frees the place. MAX_STREAMS_PER_USER sets the default.'))}</p></section>`;
+}
+
 // Server version and updates (the server looks on GitHub).
 function updatesCard(up) {
   if (!up) return '';
@@ -1174,7 +1186,7 @@ function updatesCard(up) {
 }
 
 async function adminSystem() {
-  const [lib, en, lg, up, com, la] = await Promise.all([api('/admin/library'), api('/admin/enrich'), api('/admin/logging'), api('/admin/updates').catch(() => null), api('/admin/community'), api('/admin/login-alerts')]);
+  const [lib, en, lg, up, com, la, str] = await Promise.all([api('/admin/library'), api('/admin/enrich'), api('/admin/logging'), api('/admin/updates').catch(() => null), api('/admin/community'), api('/admin/login-alerts'), api('/admin/streams')]);
   const sc = lib.scan;
   const enState = !en.enabled ? tr('Off') : en.running ? tr('Looking up …')
     : en.finished ? tr('Last run {when}', { when: ago(en.finished) }) + (en.error ? ' (' + tr('aborted: {why}', { why: en.error }) + ')' : '') : tr('Waiting for the next scan');
@@ -1194,6 +1206,7 @@ async function adminSystem() {
     <div class="sub" style="margin:0 0 8px">${esc(la.enabled ? tr('On') : tr('Off'))}</div>
     <div class="actions" style="margin:0"><button class="btn sec" data-act="loginAlertsToggle" data-on="${la.enabled ? '' : '1'}">${esc(la.enabled ? tr('Turn off') : tr('Turn on'))}</button></div>
     <p class="dim small" style="margin:10px 0 0">${esc(tr('A user gets a message in their bell when their account is logged in from a device or a network (address group) they have not used before. The first login of a user raises nothing. LOGIN_ALERTS sets the default.'))}</p></section>
+    ${streamsCard(str)}
     <section class="acard"><h3>${esc(tr('Community'))}</h3>
     <div class="sub" style="margin:0 0 8px">${esc(com.enabled ? tr('On') : tr('Off'))}${com.enabled ? ' · ' + esc(tr('{n} of {total} users share what they listen to', { n: com.sharing, total: com.users })) : ''}</div>
     <div class="actions" style="margin:0"><button class="btn sec" data-act="communityToggle" data-on="${com.enabled ? '' : '1'}">${esc(com.enabled ? tr('Turn off') : tr('Turn on'))}</button></div>
@@ -1381,6 +1394,11 @@ Object.assign(actions, {
 
 $('#view').addEventListener('submit', async (e) => {
   const f = e.target;
+  if (f.id === 'streamForm') {  // parallel playback limit in the admin area
+    e.preventDefault();
+    try { await api('/admin/streams', { method: 'PUT', json: { max_streams: Number(f.elements.max_streams.value) } }); toast(tr('Saved')); route(); } catch (er) { toast(er.message, 3000, true); }
+    return;
+  }
   if (f.id === 'nameForm') {
     e.preventDefault();
     try {
@@ -2761,6 +2779,41 @@ function kickPlayback() {
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(kickPlayback, 150); });
 window.addEventListener('pageshow', () => setTimeout(kickPlayback, 150));
+// Playing at the same time: every player (tab or app) that plays holds one place for the account (the admin can limit them) and renews it every 15 s.
+// If the account is full the server says no: this player pauses and tells why, the others play on. Offline or other errors never stop the music.
+const SLOT = { held: false, busy: false, beat: 0, rel: 0 };
+const slotBody = { json: { player: PLAYER_ID } };
+const slotHold = () => { SLOT.held = true; clearInterval(SLOT.beat); SLOT.beat = setInterval(slotBeat, 15000); };
+async function slotClaim() {
+  if (SLOT.held || SLOT.busy || !S.user) return;
+  SLOT.busy = true;
+  try { await api('/player/claim', slotBody, 8000); slotHold(); } catch (e) { if (e.status === 409) slotDenied(e.message); } finally { SLOT.busy = false; }
+}
+async function slotBeat() {
+  try { await api('/player/beat', slotBody, 8000); } catch (e) { if (e.status === 409) slotDenied(e.message); }
+}
+function slotFree() {
+  if (!SLOT.held) return;
+  SLOT.held = false;
+  clearInterval(SLOT.beat);
+  if (S.user) api('/player/release', slotBody, 8000).catch(() => {});
+}
+function slotDenied(message) {
+  SLOT.held = false;
+  clearInterval(SLOT.beat);
+  audio.pause();
+  setPlaying(false, false);
+  uiAlert(message);
+}
+audio.addEventListener('playing', () => { clearTimeout(SLOT.rel); slotClaim(); });
+['pause', 'ended'].forEach((ev) => audio.addEventListener(ev, () => {
+  clearTimeout(SLOT.rel);
+  SLOT.rel = setTimeout(() => { if (audio.paused && !S.wantPlay) slotFree(); }, 3000);  // a track change in between keeps the place
+}));
+window.addEventListener('pagehide', () => {
+  if (SLOT.held && S.user) fetch('/api/player/release', { method: 'POST', keepalive: true, credentials: 'same-origin', headers: { 'X-CSRF-Token': S.csrf, 'Content-Type': 'application/json' }, body: JSON.stringify({ player: PLAYER_ID }) }).catch(() => {});
+});
+
 audio.addEventListener('play', () => setPlaying(true, S.loading));
 audio.addEventListener('pause', () => { if (S.resetting) return; setPlaying(false, false); });
 ['pause', 'waiting', 'stalled', 'playing', 'emptied'].forEach((ev) => audio.addEventListener(ev, () => evlog(`${ev} at ${audio.currentTime.toFixed(0)} s${document.visibilityState === 'hidden' ? ' (background)' : ''}`, 3000)));

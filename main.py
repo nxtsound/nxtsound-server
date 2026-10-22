@@ -44,8 +44,9 @@ import plugins
 import library
 import playerhub
 import pluginproto
+import streamguard
 import sysmon
-from i18n import tr
+from i18n import tr, trn
 
 log = logging.getLogger("server")
 pluginproto.translate = tr  # plugin errors are translated into the language of the current request
@@ -479,6 +480,30 @@ def player_command(body: PlayerCommandIn, user: dict = Depends(current_user)):
         raise HTTPException(404, tr("That device is not available any more."))
     if playerhub.send(user["id"], body.target, {"cmd": body.cmd, "value": body.value}) != "ok":
         raise HTTPException(409, tr("That device does not respond."))
+    return {"ok": True}
+
+
+# ---------- Playing on several devices at once (limit per account, see streamguard.py) ----------
+
+class PlayerIn(BaseModel):
+    player: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")  # chosen by the page, new with every load
+
+
+@api.post("/player/claim")
+@api.post("/player/beat")
+def player_claim(body: PlayerIn | None = None, user: dict = Depends(current_user)):
+    """A player starts playing (claim) or keeps playing (heartbeat). 409 with a message if the account already plays as many streams as allowed."""
+    ok, active, cap = streamguard.claim(user["id"], user["sid"], body.player if body else "")
+    if not ok:
+        raise HTTPException(409, trn(cap, "This account is already playing one stream, the most the admin allows. Pause it to play here.",
+                                    "This account is already playing {n} streams, the most the admin allows. Pause one of them to play here."))
+    return {"ok": True, "active": active, "limit": cap}
+
+
+@api.post("/player/release")
+def player_release(body: PlayerIn | None = None, user: dict = Depends(current_user)):
+    """The player stopped or paused: its place is free again."""
+    streamguard.release(user["id"], user["sid"], body.player if body else "")
     return {"ok": True}
 
 
@@ -1162,6 +1187,30 @@ async def admin_plugin_check_update(plugin_id: str):
 def admin_updates():
     """Versions: the server (from GitHub, if UPDATE_REPO is set) and the plugins installed from a repository."""
     return sysmon.snapshot()
+
+
+class StreamsIn(BaseModel):
+    max_streams: int = Field(ge=0, le=streamguard.MAX_LIMIT)
+
+
+def _streams_state() -> dict:
+    names = {u["id"]: u["name"] for u in db.list_users()}
+    now = streamguard.playing()
+    return {"max_streams": streamguard.limit(), "default": streamguard.DEFAULT_LIMIT, "max": streamguard.MAX_LIMIT,
+            "playing": sorted(({"user": names.get(uid, "?"), "streams": n} for uid, n in now.items()), key=lambda x: x["user"].lower())}
+
+
+@admin.get("/streams")
+def admin_streams():
+    """How many streams of one account may play at once (0 = no limit), and who plays now."""
+    return _streams_state()
+
+
+@admin.put("/streams")
+def admin_streams_set(body: StreamsIn):
+    streamguard.set_limit(body.max_streams)
+    log.info("Parallel playback per account set to %s", body.max_streams)
+    return _streams_state()
 
 
 class ChannelIn(BaseModel):

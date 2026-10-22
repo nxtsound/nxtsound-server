@@ -65,6 +65,7 @@ secure by default, and the core stays free of any third-party service.
 | `pluginproto.py` | Protocol v1: constants and manifest validation (no dependency on the rest). |
 | `plugincheck.py` | Checks a running plugin against the protocol (CLI and used by tests). |
 | `sysmon.py` | Background checks: disk space, newer server version (GitHub), newer plugin versions. Feeds the bell. |
+| `streamguard.py` | Playing at the same time: who holds a "place" per account, keyed by login and a player ID the page makes up at every load (claim, heartbeat every 15 s, release); limit set by the admin. In memory. |
 | `logconf.py` | Log categories, levels (env + admin), in-memory ring buffers (global and per plugin). |
 | `i18n.py` | Server-side translations (`tr()`), language resolution. |
 | `static/` | The web app: `index.html`, `app.js`, `style.css`, `scrollbars.js`, `tutorial.js`, `manifest.webmanifest`, icons, `i18n/de.json`. |
