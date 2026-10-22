@@ -45,6 +45,7 @@ def clean_db():
             c.execute(f"DELETE FROM {table}")
     main._login_fails.clear()
     main.playerhub.reset()
+    main.streamguard.reset()
     main._home_cache.clear()
     yield
 

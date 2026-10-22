@@ -237,6 +237,7 @@ delete an account (including its playlists and history).
 - **Information from the internet**: turn the MusicBrainz lookups on or off, run them now.
 - **Updates**: the server version, "Check for updates", and what is available.
 - **Community**: turn the feature on or off for everyone.
+- **Playing at the same time**: how many streams of one account may play at once (default: no limit) and who plays right now. Every browser tab or app that plays counts. One over the limit gets a message and does not start; the others keep playing.
 - **Logging**: choose how much the server logs, per category, and read the latest messages.
 - **Backup**: download or restore a backup of the database.
 

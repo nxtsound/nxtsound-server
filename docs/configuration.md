@@ -36,6 +36,7 @@ Settings marked **admin area** can also be changed at runtime there, and the adm
 | `SESSION_DAYS` | `30` | A login ends after this many days without use. |
 | `SESSION_MAX_DAYS` | `180` | A login ends after this many days at the latest, however often it is used. `0` = no limit. |
 | `LOGIN_ALERTS` | `1` | `0` = no message when an account is logged in from a new device or network. **Admin area.** |
+| `MAX_STREAMS_PER_USER` | `0` | How many streams (players: tabs, apps) of one account may play at the same time. `0` = no limit. **Admin area.** |
 | `APP_SCRYPT_N` | `65536` | Cost of the password hash. Only lower it for tests. |
 
 ## Behind a proxy
