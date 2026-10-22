@@ -101,6 +101,34 @@ The full list is in the [configuration reference](configuration.md).
 
 Docker: `docker compose up --build`. The image installs `ffmpeg` and `git`, runs as user 1000 and fixes the owner of the mounted folders at startup (`docker-entrypoint.sh`).
 
+### A development instance with demo data
+
+An empty server is hard to develop against: no history, no friends, no playlists. `tools/demo/` builds a throw-away instance with made-up artists, generated tones
+and covers, four users, 75 days of listening history, likes, playlists and friends. Nothing in it is real, and everything lives in `tools/demo/work/` (ignored by git).
+
+```sh
+.venv/bin/pip install pillow mutagen numpy                   # only for these tools, not for the server
+.venv/bin/python tools/demo/gen.py tools/demo/work/music     # 37 tiny audio files with tags and cover art
+.venv/bin/python tools/demo/seed.py                          # users, history, likes, playlists, friends
+cat tools/demo/work/demo-password.txt                        # a random password, one per demo database
+
+D=$PWD/tools/demo/work
+DB_PATH=$D/data/server.db COVER_DIR=$D/data/covers MUSIC_DIR=$D/music \
+PLUGINS_DIR=$D/plugins PLUGIN_DATA_DIR=$D/data/plugin-data \
+ANALYZE=0 ENRICH=0 SYSMON_ON_START=0 SCAN_ON_START=0 LYRICS=0 PLUGIN_USE_VENV=0 DEFAULT_LANG=en \
+  .venv/bin/uvicorn main:app --reload --port 8030
+```
+
+Open <http://localhost:8030>. The users are `demo` (admin), `maria`, `jonas` and `lena`; all share the password from the file. For anything with two people or two
+devices (sessions, friends, remote control) use two browsers, or one normal and one private window, logged in as different users.
+
+- **Look into the database:** `sqlite3 tools/demo/work/data/server.db`, for example `.tables` or `select * from sessions;`.
+- **Start over:** `rm -rf tools/demo/work/data`, then run `seed.py` again (it creates a new password).
+- **Without the reload option** `python tools/demo/run_demo.py` starts the same instance (`DEMO_PORT` sets the port, default 8030).
+- The automated tests never touch this instance; they use their own temporary database (see [Tests](#tests)).
+
+`tools/demo/README.md` also explains how the README screenshots are taken from this instance.
+
 ## Tests
 
 ```sh
