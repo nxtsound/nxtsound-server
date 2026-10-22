@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PY_FILES = ["logconf.py", "main.py", "db.py", "library.py", "enrich.py", "autolists.py", "plugins.py", "pluginhost.py", "pluginproto.py", "i18n.py"]
+PY_FILES = ["logconf.py", "main.py", "db.py", "library.py", "enrich.py", "autolists.py", "homewidgets.py", "plugins.py", "pluginhost.py", "pluginproto.py", "i18n.py"]
 JS_FILES = ["static/app.js", "static/tutorial.js"]
 HTML_FILES = ["static/index.html"]
 

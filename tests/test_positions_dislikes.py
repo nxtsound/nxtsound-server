@@ -67,12 +67,12 @@ def test_dislike_removes_seed_from_home(alice, lib):
     for title in ("Alpha", "Beta"):
         alice.post("/api/me/played", json=next(t for t in alice.get("/api/search", params={"q": title}).json()["items"]))
     before = alice.get("/api/home").json()
-    assert any(sh["title"].startswith("Because you listened") for sh in before["shelves"])
+    assert any(w["title"].startswith("Because you listened") for w in before["widgets"])
     artist_id = next(t["artist_id"] for t in _radio(alice, ids["Alpha"]) if t["title"] == "Gamma")
     alice.post("/api/dislikes", json={"kind": "artist", "id": artist_id})  # both seeds are by this artist
     after = alice.get("/api/home").json()
-    assert not any(sh["title"].startswith("Because you listened") for sh in after["shelves"])
-    assert after["shelves"][0]["title"] == "Recently played"  # own history stays
+    assert not any(w["title"].startswith("Because you listened") for w in after["widgets"])
+    assert after["widgets"][0]["title"] == "Recently played"  # own history stays
 
 
 def test_dislike_validates(alice):

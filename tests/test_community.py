@@ -113,15 +113,18 @@ def test_songs_that_are_gone_are_left_out(alice, bob, lib):
 
 def test_the_home_page_shows_what_friends_listen_to_only_when_on(alice, bob, lib):
     play(uid("Alice"), {**track(1), "id": library.search_tracks("alpha")[0]["id"]}, 0.5)
-    assert "friends" not in alice.get("/api/home?refresh=1").json()  # off: no trace
+    h = alice.get("/api/home?refresh=1").json()
+    assert "community" not in h and not any(w["type"] == "friends" for w in h["widgets"])  # off: no trace
     on(alice)
     bob.put("/api/community/share", json={"share": True})
     play(uid("Bob"), {**track(2), "id": library.search_tracks("beta")[0]["id"], "title": "Beta"}, 0.01)
     h = alice.get("/api/home").json()
-    assert h["friends"] == [] and h["community"] == {"enabled": True, "following": 0}  # follows nobody yet
+    fw = next(w for w in h["widgets"] if w["type"] == "friends")
+    assert fw["items"] == [] and h["community"] == {"enabled": True, "following": 0}  # follows nobody yet
     alice.post(f"/api/community/follow/{uid('Bob')}")
     h = alice.get("/api/home").json()  # not cached: the friends' activity is fresh every time
-    assert [(f["user"]["name"], f["track"]["title"]) for f in h["friends"]] == [("Bob", "Beta")] and h["community"]["following"] == 1
+    fw = next(w for w in h["widgets"] if w["type"] == "friends")
+    assert [(f["user"]["name"], f["track"]["title"]) for f in fw["items"]] == [("Bob", "Beta")] and h["community"]["following"] == 1
 
 
 def test_turning_it_off_hides_it_but_keeps_the_follows(alice, bob):

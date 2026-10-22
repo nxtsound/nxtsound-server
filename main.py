@@ -36,6 +36,7 @@ import autolists
 import db
 import devices
 import enrich
+import homewidgets
 import i18n
 import logconf
 import loginalerts
@@ -1395,52 +1396,6 @@ async def status(_: dict = Depends(admin_user)):
 
 # ---------- Home page ----------
 
-async def _build_home(user_id: int) -> dict:
-    recent = await asyncio.to_thread(db.recent_tracks, user_id, 20)
-    candidates = await asyncio.to_thread(db.seed_candidates, user_id, 6)
-    ids = [t["id"] for t in recent + candidates]
-    alive = await asyncio.to_thread(library.existing, ids)
-    alive |= {i for i in ids if plugins.is_enabled_id(i)}
-    recent = [t for t in recent if t["id"] in alive]
-    fresh = await asyncio.to_thread(library.recently_added, 12)
-    if not recent:
-        shelves = []
-        if fresh:
-            shelves.append({"kind": "new", "title": tr("Recently added"), "subtitle": "", "tracks": fresh})
-            discover = await asyncio.to_thread(library.random_tracks, 12, {t["id"] for t in fresh})
-            if discover:
-                shelves.append({"kind": "discover", "title": tr("Discover"), "subtitle": tr("A random selection from your library"), "tracks": discover})
-        return {"empty": not shelves, "shelves": shelves, "artists": []}
-    blocked = await asyncio.to_thread(db.blocked_sets, user_id)
-    seeds = [s for s in candidates if s["id"] in alive and _allowed([s], blocked)][:3]
-    known = {t["id"] for t in recent}
-
-    async def similar_to(seed: dict) -> list[dict]:
-        if plugins.is_plugin_id(seed["id"]):  # plugin track: the source's radio (slow, hence in parallel)
-            try:
-                return await asyncio.to_thread(plugins.radio, seed["id"], 30)
-            except plugins.PluginError:
-                return []
-        return await asyncio.to_thread(library.similar, seed["id"], 30)
-
-    results = [_allowed(r, blocked) for r in await asyncio.gather(*(similar_to(s) for s in seeds))]
-    lists = [[t for t in r if t["id"] not in known] for r in results]
-    # Order: what you just heard, what is new in the library, your mix, then the "because" shelves (the friends row goes in front of those).
-    shelves = [{"kind": "recent", "title": tr("Recently played"), "subtitle": "", "tracks": recent[:12]}]
-    new = [t for t in fresh if t["id"] not in known][:12]
-    if new:
-        shelves.append({"kind": "new", "title": tr("Recently added"), "subtitle": "", "tracks": new})
-    mix = _interleave(lists, 30)
-    if mix:
-        shelves.append({"kind": "mix", "title": tr("Your Mix"), "subtitle": tr("Based on what you listened to recently"), "tracks": mix})
-    for seed, r in zip(seeds, results):
-        tracks = [t for t in r if t["id"] not in known][:12]
-        if tracks:
-            shelves.append({"kind": "because", "title": tr("Because you listened to “{title}”", title=seed["title"]), "subtitle": seed["artist"], "thumb": seed.get("thumb", ""), "tracks": tracks})
-    artists = await asyncio.to_thread(db.top_artists, user_id, 10)
-    return {"empty": False, "shelves": shelves, "artists": artists}
-
-
 # ---------- Automatic lists ("For you") ----------
 
 @api.get("/auto")
@@ -1722,22 +1677,7 @@ def played(track: Track, user: dict = Depends(current_user)):
     return {"ok": True}
 
 
-def _interleave(lists: list[list[dict]], limit: int) -> list[dict]:
-    out: list[dict] = []
-    seen: set[str] = set()
-    i = 0
-    while len(out) < limit and any(i < len(lst) for lst in lists):
-        for lst in lists:
-            if i < len(lst) and lst[i]["id"] not in seen:
-                seen.add(lst[i]["id"])
-                out.append(lst[i])
-                if len(out) >= limit:
-                    break
-        i += 1
-    return out
-
-
-_home_cache: dict[int, tuple[int, float, dict, str]] = {}  # user_id -> (last play id, time, response, language)
+_home_cache = homewidgets._similar_cache  # user_id -> the slow part of "Your Mix" (cleared when likes, dislikes or the library change)
 
 
 def _allowed(tracks: list[dict], blocked: tuple[set[str], set[str]]) -> list[dict]:
@@ -1746,18 +1686,56 @@ def _allowed(tracks: list[dict], blocked: tuple[set[str], set[str]]) -> list[dic
 
 
 @api.get("/home")
-async def home(refresh: int = 0, user: dict = Depends(current_user)):
+async def home(refresh: int = 0, tz: int = Query(0, ge=-840, le=840), user: dict = Depends(current_user)):
+    """The home page: the widgets of the user's layout with their data. tz: minutes the user's clock is ahead of UTC (for times of day)."""
     uid = user["id"]
-    latest = await asyncio.to_thread(db.latest_play_id, uid)
-    hit = _home_cache.get(uid)
-    if not refresh and hit and hit[0] == latest and time.time() - hit[1] < 900 and hit[3] == i18n.current():  # shelf titles are translated
-        data = hit[2]
-    else:
-        data = await _build_home(uid)
-        _home_cache[uid] = (latest, time.time(), data, i18n.current())
-    if db.community_enabled():  # not cached: it changes without this user playing anything
-        return {**data, "community": {"enabled": True, "following": len(db.following_ids(uid))}, "friends": await _friends(uid)}
-    return data
+    layout, custom, _ = homewidgets.layout_of(uid)
+    if not await asyncio.to_thread(db.latest_play_id, uid) and not any(e["type"] == "discover" for e in layout):
+        layout = layout + [{"id": "discover", "type": "discover", "opts": {"count": 12}}]  # nothing listened to yet: at least a random selection
+    blocked = await asyncio.to_thread(db.blocked_sets, uid)
+    widgets = await homewidgets.build(uid, layout, tz, lambda tracks: _allowed(tracks, blocked), _friends, bool(refresh))
+    out = {"empty": not widgets, "widgets": widgets, "custom": custom}
+    if db.community_enabled():
+        out["community"] = {"enabled": True, "following": len(db.following_ids(uid))}
+    return out
+
+
+class LayoutIn(BaseModel):
+    layout: list[dict] = Field(max_length=homewidgets.MAX_WIDGETS)
+
+
+def _layout_state(uid: int) -> dict:
+    layout, custom, _ = homewidgets.layout_of(uid)
+    return {"custom": custom, "layout": layout}
+
+
+@api.get("/home/widgets")
+def home_widgets():
+    """Every widget that can be put on the home page, with its options (for the "customize" page)."""
+    return {"catalog": homewidgets.catalog()}
+
+
+@api.get("/home/layout")
+def home_layout(user: dict = Depends(current_user)):
+    return _layout_state(user["id"])
+
+
+@api.put("/home/layout")
+def home_layout_set(body: LayoutIn, user: dict = Depends(current_user)):
+    """Saves the user's own order, selection and options of widgets."""
+    try:
+        layout = homewidgets.clean_layout(body.layout, strict=True)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    homewidgets.save_layout(user["id"], layout)
+    return _layout_state(user["id"])
+
+
+@api.delete("/home/layout")
+def home_layout_reset(user: dict = Depends(current_user)):
+    """Back to the default layout."""
+    db.delete_home_layout(user["id"])
+    return _layout_state(user["id"])
 
 
 # ---------- Search history, suggestions, likes ----------

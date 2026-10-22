@@ -81,5 +81,5 @@ def test_likes_boost_home_recommendations(alice, lib):
     alice.post("/api/me/played", json=next(t for t in alice.get("/api/search", params={"q": "Alpha"}).json()["items"]))
     epsilon = next(t for t in alice.get("/api/search", params={"q": "Epsilon"}).json()["items"])
     alice.post("/api/likes", json=epsilon)
-    titles = [sh["title"] for sh in alice.get("/api/home").json()["shelves"]]
+    titles = [w["title"] for w in alice.get("/api/home").json()["widgets"]]
     assert any("Epsilon" in t for t in titles)  # the liked track serves as seed although it never played
