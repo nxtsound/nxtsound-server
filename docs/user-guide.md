@@ -155,6 +155,11 @@ The home page learns from what you play:
 
 Pull down on a phone to refresh.
 
+**Make it yours:** at the bottom of the home page, *Customize home* lets you choose the sections, move them up and down, remove them and set their options
+(for example the period of *Your top songs*). Besides the usual rows you can add *Rediscover*, genres, decades and artist mixes, your playlists, a button that shuffles your
+liked songs, your recap in numbers, what you listened to a year ago and a mix for the current time of day. Sections without anything to show stay hidden.
+Changes are saved at once; *Back to the default* restores the original page. Every user has their own layout.
+
 ### Search
 
 Tap the magnifier (or press `/` on a computer). Results appear as you type: your own library first, then plugin sources. Tabs switch

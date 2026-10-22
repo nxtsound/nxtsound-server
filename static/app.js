@@ -143,6 +143,7 @@ const S = {
   lists: {},      // lists of the page currently shown, by key
   modes: {},      // 'radio' (tap starts radio) | 'pick' (search hit artist/album) | 'list' (tap plays the list)
   nav: 0,         // counter against stale answers when changing pages
+  hw: null,       // the home layout while it is being customized
   routes: 0,
   reported: false,
   extendP: null,
@@ -509,45 +510,54 @@ async function viewCommunity(my) {
   };
 }
 
+// ---------- Home page: widgets ----------
+
+const wHead = (w) => `<div class="phead${w.thumb !== undefined ? ' withcover' : ''}${w.nav ? ' hasnav' : ''}">${w.thumb !== undefined ? cover(w.thumb) : ''}<div class="ptext"><h2>${esc(w.title)}</h2>${w.subtitle ? `<div class="sub">${esc(w.subtitle)}</div>` : ''}</div>${w.nav ? `<button class="seeall" data-nav="${esc(w.nav)}">${esc(tr('Show all'))}</button>` : ''}</div>`;
+
+function widgetHtml(w, key) {
+  const cards = (items, one) => `<div class="hscroll">${items.map(one).join('')}</div>`;
+  switch (w.view) {
+    case 'pager': {
+      const pages = [];
+      for (let p = 0; p < w.tracks.length; p += 4) pages.push(w.tracks.slice(p, p + 4).map((t, j) => qTile(t, key, p + j)).join(''));  // 2 x 2 per page
+      const dots = pages.length > 1 ? `<div class="dots">${pages.map((_, p) => `<i${p ? '' : ' class="on"'}></i>`).join('')}</div>` : '';
+      return `<section class="sect sect-flat">${wHead(w)}<div class="pager">${pages.map((p) => `<div class="ppage">${p}</div>`).join('')}</div>${dots}</section>`;
+    }
+    case 'shelf': return `<section class="sect sect-flat">${wHead(w)}${cards(w.tracks, (t, i) => trackCard(t, key, i))}</section>`;
+    case 'hero': return `<section class="sect sect-hero">${wHead(w)}${cards(w.tracks, (t, i) => trackCard(t, key, i))}</section>`;
+    case 'because': return `<section class="sect sect-flat sect-because">${wHead(w)}${cards(w.tracks, (t, i) => trackCard(t, key, i))}</section>`;
+    case 'artists': return `<section class="sect sect-flat">${wHead(w)}${cards(w.artists, artistCard)}</section>`;
+    case 'tiles': return `<section class="sect sect-flat">${wHead(w)}${cards(w.items, (x) => `<div class="card" data-nav="#/auto/${encodeURIComponent(x.id)}">${cover(x.thumb)}<div class="t">${esc(x.name)}</div><div class="a">${esc(x.subtitle)}</div></div>`)}</section>`;
+    case 'playlists': return `<section class="sect sect-flat">${wHead(w)}${cards(w.items, (p) => `<div class="card" data-nav="#/playlist/${p.id}">${cover(p.thumb)}<div class="t">${esc(p.name)}</div><div class="a">${esc(trn(p.count, '{n} track', '{n} tracks'))}</div></div>`)}</section>`;
+    case 'action': return `<section class="sect sect-flat sect-action">${wHead(w)}<div class="actions" style="margin:6px 16px 0"><button class="btn" data-act="shuffleLikes">▶ ${esc(tr('Shuffle'))}</button></div></section>`;
+    case 'stats': return `<section class="sect sect-flat">${wHead(w)}<div class="stats mini">${stat(fmtHours(w.seconds), tr('Listened'))}${stat(fmtInt(w.plays), tr('Plays'))}${stat(w.top_artist || '–', tr('Top artist'))}</div></section>`;
+    case 'friends':
+      if (w.items.length) return `<section class="sect sect-flat">${wHead(w)}${cards(w.items, (f, i) => `<div class="card" data-l="fr" data-i="${i}">${cover(f.track.thumb)}<div class="t">${esc(f.track.title)}</div><div class="a">${f.now ? '<span class="dot on"></span>' : ''}${esc(f.user.name)} · ${esc(f.now ? tr('listening now') : ago(f.played_at))}</div></div>`)}</section>`;
+      if (w.following === 0) return `<section class="sect sect-flat"><div class="phead"><h2>${esc(tr('Community'))}</h2><div class="sub">${esc(tr('Follow friends to see what they listen to.'))}</div></div><div class="actions" style="margin:4px 8px 0"><button class="btn sec" data-nav="#/community">${esc(tr('Find people'))}</button></div></section>`;
+      return '';
+    default: return '';
+  }
+}
+
 async function renderHome(my, refresh = false) {
   setTab('home');
   const view = $('#view');
   if (!refresh) view.innerHTML = skeleton();
-  const d = await api('/home' + (refresh ? '?refresh=1' : ''), {}, 60000);
+  const d = await api('/home?tz=' + -new Date().getTimezoneOffset() + (refresh ? '&refresh=1' : ''), {}, 60000);
   if (my !== S.nav) return;
+  const customize = `<div class="actions homeedit"><button class="btn sec" data-nav="#/home/edit">${esc(tr('Customize home'))}</button></div>`;
   if (d.empty) {
-    view.innerHTML = '<div class="empty"><h1>' + esc(tr('Hello {name}', { name: S.user.name })) + '</h1>' + esc(tr('Search for a song, listen to it and tap it: then the radio starts.')) + '<br>' + esc(tr('Once you have listened to something, this home page builds itself around your taste.')) + '</div>' + await versionLine();
+    view.innerHTML = '<div class="empty"><h1>' + esc(tr('Hello {name}', { name: S.user.name })) + '</h1>' + esc(tr('Search for a song, listen to it and tap it: then the radio starts.')) + '<br>' + esc(tr('Once you have listened to something, this home page builds itself around your taste.')) + '</div>' + customize + await versionLine();
     return;
   }
   resetLists();
   let html = '';
-  let friendsHtml = '';
-  if (d.friends && d.friends.length) {
-    setList('fr', d.friends.map((f) => f.track));
-    friendsHtml = `<section class="sect sect-flat"><div class="phead"><h2>${esc(tr('What your friends listen to'))}</h2></div><div class="hscroll">${d.friends.map((f, i) => `<div class="card" data-l="fr" data-i="${i}">${cover(f.track.thumb)}<div class="t">${esc(f.track.title)}</div><div class="a">${f.now ? '<span class="dot on"></span>' : ''}${esc(f.user.name)} · ${esc(f.now ? tr('listening now') : ago(f.played_at))}</div></div>`).join('')}</div></section>`;
-  } else if (d.community && d.community.following === 0) {
-    friendsHtml = `<section class="sect sect-flat"><div class="phead"><h2>${esc(tr('Community'))}</h2><div class="sub">${esc(tr('Follow friends to see what they listen to.'))}</div></div><div class="actions" style="margin:4px 8px 0"><button class="btn sec" data-nav="#/community">${esc(tr('Find people'))}</button></div></section>`;
-  }
-  const friendsAt = d.shelves.findIndex((sh) => sh.kind === 'because') - 1;  // the friends row sits in front of the "because" shelves
-  d.shelves.forEach((sh, si) => {
-    const key = 's' + si;
-    setList(key, sh.tracks);
-    const title = `<div class="ptext"><h2>${esc(sh.title)}</h2>${sh.subtitle ? `<div class="sub">${esc(sh.subtitle)}</div>` : ''}</div>`;
-    const head = `<div class="phead${sh.thumb !== undefined ? ' withcover' : ''}">${sh.thumb !== undefined ? cover(sh.thumb) : ''}${title}</div>`;
-    if (sh.kind === 'recent') {
-      const items = sh.tracks.slice(0, 12);  // 2 x 2 per page, three pages at most
-      const pages = [];
-      for (let p = 0; p < items.length; p += 4) pages.push(items.slice(p, p + 4).map((t, j) => qTile(t, key, p + j)).join(''));
-      const dots = pages.length > 1 ? `<div class="dots">${pages.map((_, p) => `<i${p ? '' : ' class="on"'}></i>`).join('')}</div>` : '';
-      html += `<section class="sect sect-flat">${head}<div class="pager">${pages.map((p) => `<div class="ppage">${p}</div>`).join('')}</div>${dots}</section>`;
-    } else {
-      const cls = sh.kind === 'mix' ? ' sect-hero' : sh.kind === 'because' ? ' sect-flat sect-because' : ' sect-flat';
-      html += `<section class="sect${cls}">${head}<div class="hscroll">${sh.tracks.map((t, i) => trackCard(t, key, i)).join('')}</div></section>`;
-    }
-    if (si === (friendsAt >= 0 ? friendsAt : d.shelves.length - 1)) html += friendsHtml;
+  d.widgets.forEach((w, i) => {
+    if (w.view === 'friends') setList('fr', w.items.map((f) => f.track));
+    else if (w.tracks) setList('w' + i, w.tracks);
+    html += widgetHtml(w, 'w' + i);
   });
-  if (d.artists.length) html += `<section class="sect sect-flat"><div class="phead"><h2>${esc(tr('Your artists'))}</h2></div><div class="hscroll">${d.artists.map(artistCard).join('')}</div></section>`;
-  view.innerHTML = html + await versionLine();
+  view.innerHTML = html + customize + await versionLine();
   if (my !== S.nav) return;
   view.querySelectorAll('.pager').forEach((pg) => {
     const dots = pg.parentNode.querySelectorAll('.dots i');
@@ -557,6 +567,74 @@ async function renderHome(my, refresh = false) {
     }, { passive: true });
   });
 }
+
+// Customizing: the user's own order, selection and options of widgets. Every change is saved at once.
+async function viewHomeEdit(my) {
+  setTab('home');
+  const view = $('#view');
+  view.innerHTML = loading();
+  const [{ catalog }, state] = await Promise.all([api('/home/widgets'), api('/home/layout')]);
+  if (my !== S.nav) return;
+  S.hw = { catalog, by: Object.fromEntries(catalog.map((c) => [c.type, c])), layout: state.layout, custom: state.custom };
+  drawHomeEdit();
+}
+
+function drawHomeEdit() {
+  const { catalog, by, layout, custom } = S.hw;
+  const opt = (e, i, o) => {
+    const v = e.opts[o.key] === undefined ? o.default : e.opts[o.key];
+    const field = o.type === 'int'
+      ? `<input class="hw-opt" type="number" data-i="${i}" data-key="${esc(o.key)}" min="${o.min}" max="${o.max}" value="${v}">`
+      : `<select class="hw-opt langsel" data-i="${i}" data-key="${esc(o.key)}">${o.choices.map((c) => `<option value="${esc(c.value)}"${c.value === v ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}</select>`;
+    return `<label class="hw-o">${esc(o.label)}${field}</label>`;
+  };
+  const row = (e, i) => {
+    const c = by[e.type];
+    if (!c) return '';
+    return `<div class="hw"><div class="hw-main"><div class="hw-title">${esc(c.title)}</div><div class="dim small">${esc(c.description)}</div>
+      ${c.options.length ? `<div class="hw-opts">${c.options.map((o) => opt(e, i, o)).join('')}</div>` : ''}</div>
+      <div class="hw-act"><button class="ibtn up" data-act="hwMove" data-i="${i}" data-d="-1" aria-label="${esc(tr('Move up'))}"${i === 0 ? ' disabled' : ''}>${IC.chev}</button>
+      <button class="ibtn" data-act="hwMove" data-i="${i}" data-d="1" aria-label="${esc(tr('Move down'))}"${i === layout.length - 1 ? ' disabled' : ''}>${IC.chev}</button>
+      <button class="ibtn" data-act="hwRemove" data-i="${i}" aria-label="${esc(tr('Remove'))}">${IC.close}</button></div></div>`;
+  };
+  const used = new Set(layout.map((e) => e.type));
+  const addable = catalog.filter((c) => c.multiple || !used.has(c.type));
+  $('#view').innerHTML = `<div class="acct wide"><button class="back" data-nav="#/home">‹ ${esc(tr('Home'))}</button><h1>${esc(tr('Customize home'))}</h1>
+    <div class="sub" style="margin:0 0 12px">${esc(tr('Choose which sections your home page shows and in which order. Sections without anything to show stay hidden. Changes are saved at once.'))}</div>
+    <div class="hwlist">${layout.map(row).join('') || `<div class="empty" style="padding:16px">${esc(tr('Nothing selected. Add a section below.'))}</div>`}</div>
+    <h2 style="margin:22px 0 8px">${esc(tr('Add a section'))}</h2>
+    <div class="hwlist">${addable.length ? addable.map((c) => `<div class="hw"><div class="hw-main"><div class="hw-title">${esc(c.title)}</div><div class="dim small">${esc(c.description)}</div></div>
+      <div class="hw-act"><button class="btn sec" data-act="hwAdd" data-type="${esc(c.type)}">${IC.plus}<span>${esc(tr('Add'))}</span></button></div></div>`).join('') : `<div class="dim small">${esc(tr('Everything is on your home page already.'))}</div>`}</div>
+    <div class="actions"><button class="btn sec" data-nav="#/home">${esc(tr('Done'))}</button>${custom ? `<button class="btn sec" data-act="hwReset">${esc(tr('Back to the default'))}</button>` : ''}</div></div>`;
+}
+
+async function saveHomeLayout() {
+  try {
+    const r = await api('/home/layout', { method: 'PUT', json: { layout: S.hw.layout } });
+    S.hw.layout = r.layout;
+    S.hw.custom = r.custom;
+  } catch (e) { toast(e.message, 3000, true); }
+  drawHomeEdit();
+}
+
+Object.assign(actions, {
+  shuffleLikes: async () => {
+    try { const { tracks } = await api('/likes'); if (tracks.length) playList(shuffled(tracks), 0); else toast(tr('Nothing liked yet. Tap “Like” in the player.')); } catch (e) { toast(e.message, 3000, true); }
+  },
+  hwMove: (n) => {
+    const i = +n.dataset.i, j = i + +n.dataset.d, l = S.hw.layout;
+    if (j < 0 || j >= l.length) return;
+    [l[i], l[j]] = [l[j], l[i]];
+    saveHomeLayout();
+  },
+  hwRemove: (n) => { S.hw.layout.splice(+n.dataset.i, 1); saveHomeLayout(); },
+  hwAdd: (n) => { S.hw.layout.push({ id: '', type: n.dataset.type, opts: {} }); saveHomeLayout(); },
+  hwReset: async () => {
+    if (!(await uiConfirm(tr('Go back to the default home page?')))) return;
+    try { const r = await api('/home/layout', { method: 'DELETE' }); S.hw.layout = r.layout; S.hw.custom = r.custom; } catch (e) { toast(e.message, 3000, true); }
+    drawHomeEdit();
+  },
+});
 
 // Pull down to reload (all pages)
 function initPull() {
@@ -1736,6 +1814,7 @@ function route() {
     case 'account': job = parts[1] === 'recap' ? viewRecap(my, params) : parts[1] === 'devices' ? viewDevices(my) : viewAccount(my); break;
     case 'admin': job = viewAdmin(my, parts[1] || ''); break;
     case 'users': job = viewAdmin(my, 'users'); break;
+    case 'home': job = parts[1] === 'edit' ? viewHomeEdit(my) : renderHome(my); break;
     default: job = renderHome(my);
   }
   job.catch((e) => {
@@ -1757,6 +1836,11 @@ document.addEventListener('input', (e) => {  // filter the plugin list
 });
 
 document.addEventListener('change', async (e) => {
+  if (e.target.classList && e.target.classList.contains('hw-opt') && S.hw) {  // options of a home widget
+    const entry = S.hw.layout[+e.target.dataset.i];
+    if (entry) { entry.opts[e.target.dataset.key] = e.target.type === 'number' ? Number(e.target.value) : e.target.value; saveHomeLayout(); }
+    return;
+  }
   if (e.target.dataset && e.target.dataset.logcat) {  // log level of a category (admin area)
     try { await api('/admin/logging', { method: 'PUT', json: { levels: { [e.target.dataset.logcat]: e.target.value } } }); toast(tr('Log level saved')); route(); } catch (er) { toast(er.message, 3000, true); }
     return;
