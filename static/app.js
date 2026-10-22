@@ -726,15 +726,12 @@ async function viewPlaylists(my) {
   setTab('playlists');
   const view = $('#view');
   view.innerHTML = loading();
-  const [{ playlists }, likes, auto] = await Promise.all([api('/playlists'), api('/likes'), api('/auto').catch(() => ({ lists: [] }))]);
+  const [{ playlists }, likes] = await Promise.all([api('/playlists'), api('/likes')]);
   if (my !== S.nav) return;
   S.likes = new Set(likes.tracks.map((t) => t.id));
   resetLists();
   const likeRow = `<div class="track" data-nav="#/likes"><div class="ph likeph">${IC.liked}</div><div class="meta"><div class="t">${esc(tr('Liked songs'))}</div><div class="a">${esc(trn(likes.tracks.length, '{n} track', '{n} tracks'))}</div></div></div>`;
-  const autoRows = auto.lists.length
-    ? `<h2>${esc(tr('For you'))}</h2>` + auto.lists.map((p) => `<div class="track" data-nav="#/auto/${encodeURIComponent(p.id)}">${cover(p.thumb)}<div class="meta"><div class="t">${esc(p.name)}</div><div class="a">${esc(p.subtitle)}${p.count ? ' · ' + esc(trn(p.count, '{n} track', '{n} tracks')) : ''}</div></div></div>`).join('') + `<h2>${esc(tr('Your playlists'))}</h2>`
-    : '';
-  view.innerHTML = `<div class="actions"><button class="btn" data-act="newPlaylist">+ ${esc(tr('New playlist'))}</button></div>` + likeRow + autoRows +
+  view.innerHTML = `<div class="actions"><button class="btn" data-act="newPlaylist">+ ${esc(tr('New playlist'))}</button></div>` + likeRow +
     (playlists.length
       ? playlists.map((p) => `<div class="track" data-nav="#/playlist/${p.id}">${cover(p.thumb)}<div class="meta"><div class="t">${esc(p.name)}</div><div class="a">${esc(trn(p.count, '{n} track', '{n} tracks'))}</div></div></div>`).join('')
       : `<div class="empty">${esc(tr('No playlists of your own yet. Use the menu (⋮) next to a song to create one.'))}</div>`);
