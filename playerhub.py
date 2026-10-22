@@ -13,13 +13,14 @@ COMMANDS = {"play", "pause", "toggle", "next", "prev", "seek", "volume"}
 
 
 class Player:
-    __slots__ = ("session", "name", "browser", "system", "state", "state_at", "queue")
+    __slots__ = ("session", "name", "browser", "system", "state", "state_at", "queue", "sig")
 
     def __init__(self, session: int, name: str, browser: str, system: str):
         self.session, self.name, self.browser, self.system = session, name, browser, system
         self.state: dict | None = None
         self.state_at = 0.0
         self.queue: asyncio.Queue = asyncio.Queue(QUEUE_SIZE)
+        self.sig = ""  # what this player was last told about the others (see broadcast)
 
 
 _hub: dict[int, dict[str, Player]] = {}  # user ID -> {player ID: player}
@@ -35,6 +36,7 @@ def connect(user_id: int, player_id: str, session: int, name: str, browser: str,
         _put(old, None)  # the older stream ends
     p = Player(session, name, browser, system)
     mine[player_id] = p
+    broadcast(user_id)  # the new one hears about the others, the others about the new one (if it has something loaded)
     return p
 
 
@@ -44,6 +46,7 @@ def disconnect(user_id: int, player_id: str, player: Player) -> None:
         del mine[player_id]
     if not mine:
         _hub.pop(user_id, None)
+    broadcast(user_id)
 
 
 def _put(p: Player, msg) -> bool:
@@ -60,6 +63,7 @@ def set_state(user_id: int, player_id: str, state: dict) -> bool:
     if not p:
         return False
     p.state, p.state_at = state, time.time()
+    broadcast(user_id)
     return True
 
 
@@ -73,6 +77,29 @@ def devices(user_id: int, asker: str = "") -> list[dict]:
         out.append({"player": pid, "name": p.name, "browser": p.browser, "system": p.system, **p.state,
                     "age": round(age, 1), "playing": bool(p.state.get("playing")) and age < STATE_TTL})
     return sorted(out, key=lambda d: (not d["playing"], d["age"]))
+
+
+def _signature(devs: list[dict]) -> str:
+    """What a device list says apart from the ticking position: who plays what, under which name, how loud."""
+    return repr([(d["player"], d["track"]["id"], d["playing"], d["name"], d["browser"], d["system"], round(d.get("volume", 1) * 20), round(d.get("duration", 0))) for d in devs])
+
+
+def refresh(user_id: int, player_id: str) -> None:
+    """Tells one player the current list of the others if it changed (also when a player was dropped for lack of news)."""
+    p = _hub.get(user_id, {}).get(player_id)
+    if not p:
+        return
+    devs = devices(user_id, player_id)
+    sig = _signature(devs)
+    if sig != p.sig:
+        p.sig = sig
+        _put(p, {"event": "devices", "data": devs})
+
+
+def broadcast(user_id: int) -> None:
+    """Every connected player of the account gets the list of the others when it changed for them."""
+    for pid in list(_hub.get(user_id, {})):
+        refresh(user_id, pid)
 
 
 def send(user_id: int, target: str, command: dict) -> str:

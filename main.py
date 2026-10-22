@@ -416,8 +416,9 @@ def _own_session_label(user: dict, request: Request) -> tuple[str, str, str]:
     return mine["name"], browser, system
 
 
-async def _player_events(q, session: int):
-    """The event stream of one player: commands from other devices, a ping now and then (which also notices a login that was ended)."""
+async def _player_events(q, session: int, user_id: int = 0, player: str = ""):
+    """The event stream of one player: the list of the other devices when it changes, commands from them, and a ping now and then
+    (which also notices a login that was ended and a device that stopped reporting)."""
     yield ": connected\n\n"
     while True:
         try:
@@ -425,6 +426,7 @@ async def _player_events(q, session: int):
         except asyncio.TimeoutError:
             if not await asyncio.to_thread(db.session_exists, session):
                 return
+            playerhub.refresh(user_id, player)
             yield ": ping\n\n"
             continue
         if msg is None:
@@ -442,7 +444,7 @@ async def player_events(request: Request, player: str = Query(min_length=8, max_
 
     async def stream():
         try:
-            async for chunk in _player_events(p.queue, user["sid"]):
+            async for chunk in _player_events(p.queue, user["sid"], user["id"], player):
                 yield chunk
         finally:
             playerhub.disconnect(user["id"], player, p)
