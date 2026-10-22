@@ -106,6 +106,11 @@ CREATE TABLE IF NOT EXISTS login_blocks(
   key TEXT PRIMARY KEY,
   until INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS home_layouts(
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  layout TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS playlists(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -752,6 +757,26 @@ def record_play(user_id: int, t: dict) -> None:
         )
 
 
+# ---------- The layout of a user's home page (see homewidgets.py) ----------
+
+def get_home_layout(user_id: int) -> tuple[str, int] | None:
+    """(JSON text, time of the last change) of the layout the user made, or None while they use the default."""
+    with db() as c:
+        r = c.execute("SELECT layout, updated_at FROM home_layouts WHERE user_id = ?", (user_id,)).fetchone()
+    return (r["layout"], r["updated_at"]) if r else None
+
+
+def set_home_layout(user_id: int, layout: str) -> None:
+    with db() as c:
+        c.execute("INSERT INTO home_layouts(user_id, layout, updated_at) VALUES(?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET layout = excluded.layout, updated_at = excluded.updated_at",
+                  (user_id, layout, _now()))
+
+
+def delete_home_layout(user_id: int) -> None:
+    with db() as c:
+        c.execute("DELETE FROM home_layouts WHERE user_id = ?", (user_id,))
+
+
 def latest_play_id(user_id: int) -> int:
     with db() as c:
         row = c.execute("SELECT MAX(id) AS m FROM plays WHERE user_id = ?", (user_id,)).fetchone()
@@ -768,6 +793,25 @@ def recent_tracks(user_id: int, limit: int = 20) -> list[dict]:
             (user_id, limit),
         ).fetchall()
     return [_track(r) for r in rows]
+
+
+def top_tracks_since(user_id: int, since: float, limit: int = 20) -> list[dict]:
+    """Like top_tracks, but only plays after `since` (a Unix time)."""
+    with db() as c:
+        rows = c.execute(
+            """SELECT p.* FROM plays p
+                 JOIN (SELECT video_id, COUNT(*) AS n, MAX(id) AS mid FROM plays WHERE user_id = ? AND played_at >= ? GROUP BY video_id ORDER BY n DESC, mid DESC LIMIT ?) m ON p.id = m.mid
+                ORDER BY m.n DESC, m.mid DESC""",
+            (user_id, since, limit),
+        ).fetchall()
+    return [_track(r) for r in rows]
+
+
+def plays_in_range(user_id: int, start: float, end: float, limit: int = 3000) -> list[dict]:
+    """The plays between two Unix times, newest first, with `played_at` (the same song can appear several times)."""
+    with db() as c:
+        rows = c.execute("SELECT p.* FROM plays p WHERE user_id = ? AND played_at >= ? AND played_at < ? ORDER BY id DESC LIMIT ?", (user_id, start, end, limit)).fetchall()
+    return [{**_track(r), "played_at": r["played_at"]} for r in rows]
 
 
 def top_tracks(user_id: int, limit: int = 20) -> list[dict]:

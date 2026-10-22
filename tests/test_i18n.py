@@ -77,13 +77,13 @@ def _lang(client, code):
 
 def test_server_generated_texts_are_translated(alice, lib):
     en = alice.get("/api/home?refresh=1").json()
-    assert [s["title"] for s in en["shelves"]] == ["Recently added"] and all(s["kind"] for s in en["shelves"])
+    assert [w["title"] for w in en["widgets"]] == ["Recently added"] and all(w["type"] and w["view"] for w in en["widgets"])
     assert {x["id"]: x["name"] for x in alice.get("/api/auto").json()["lists"]}["decade:2020"] == "The 2020s"
     assert alice.get("/api/search", params={"q": "no tags"}).json()["items"][0]["artist"] == "Unknown artist"
     artist_id = alice.get("/api/search", params={"q": "Alpha"}).json()["items"][0]["artist_id"]
     assert alice.get(f"/api/artist/{artist_id}").json()["subscribers"] == "4 tracks"
     _lang(alice, "de")
-    assert [s["title"] for s in alice.get("/api/home").json()["shelves"]] == ["Neu hinzugefügt"]  # not served from the English cache
+    assert [w["title"] for w in alice.get("/api/home").json()["widgets"]] == ["Neu hinzugefügt"]  # not served from the English cache
     names = {x["id"]: x["name"] for x in alice.get("/api/auto").json()["lists"]}
     assert names["genre:Rock"] == "Rock-Mix" and names["decade:2020"] == "Die 2020er"
     assert alice.get("/api/search", params={"q": "no tags"}).json()["items"][0]["artist"] == "Unbekannter Künstler"

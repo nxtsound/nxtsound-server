@@ -135,7 +135,7 @@ def test_plugin_tracks_work_in_playlists_likes_and_history(installed):
     assert installed.post("/api/likes", json=t).status_code == 200
     assert installed.post("/api/me/played", json=t).status_code == 200
     home = installed.get("/api/home").json()
-    assert any(tr["id"] == "fake:t1" for s in home["shelves"] for tr in s["tracks"])  # "Recently played" also shows plugin tracks
+    assert any(tr["id"] == "fake:t1" for w in home["widgets"] for tr in w.get("tracks", []))  # "Recently played" also shows plugin tracks
     assert installed.get("/api/bpm/fake:t1").json() == {"ready": True, "usable": False}
 
 
@@ -152,10 +152,10 @@ def test_home_recommends_from_plugin_radio_for_plugin_plays(installed):
     t1 = installed.get("/api/search", params={"q": "first", "source": "plugins"}).json()["items"][0]
     _play(installed, t1, 3)
     home = installed.get("/api/home?refresh=1").json()
-    titles = {s["title"]: s for s in home["shelves"]}
+    titles = {w["title"]: w for w in home["widgets"]}
     assert "Your Mix" in titles and [t["id"] for t in titles["Your Mix"]["tracks"]] == ["fake:t2"]  # the source's radio, not the library's
-    assert any(s["title"].startswith("Because you listened to “First Song”") for s in home["shelves"])
-    assert home["artists"][0]["id"] == "fake:ar1"
+    assert any(w["title"].startswith("Because you listened to “First Song”") for w in home["widgets"])
+    assert next(w for w in home["widgets"] if w["type"] == "artists")["artists"][0]["id"] == "fake:ar1"
 
 
 def test_auto_lists_include_plugin_tracks_and_artist_mix(installed):

@@ -89,7 +89,7 @@ def _played(client, ids, title):
 def test_home_without_history_shows_new_and_random(alice, lib):
     home = alice.get("/api/home").json()
     assert home["empty"] is False
-    assert [s["title"] for s in home["shelves"]][:1] == ["Recently added"]
+    assert [w["title"] for w in home["widgets"]][:1] == ["Recently added"]
 
 
 def test_home_empty_library_is_empty(alice):
@@ -101,14 +101,14 @@ def test_home_personalised_after_listening(alice, lib):
     for title in ("Alpha", "Alpha", "Beta"):
         _played(alice, ids, title)
     home = alice.get("/api/home").json()
-    titles = [s["title"] for s in home["shelves"]]
+    titles = [w["title"] for w in home["widgets"]]
     assert titles[0] == "Recently played" and "Your Mix" in titles
-    recent = home["shelves"][0]["tracks"]
+    recent = home["widgets"][0]["tracks"]
     assert [t["title"] for t in recent] == ["Beta", "Alpha"]  # unique, most recent first
     heard = {ids["Alpha"], ids["Beta"]}
-    for shelf in home["shelves"][1:]:
-        assert not heard & {t["id"] for t in shelf["tracks"]}
-    assert home["artists"][0]["name"] == "Artist A"
+    for w in home["widgets"][1:]:
+        assert not heard & {t["id"] for t in w.get("tracks", [])}
+    assert next(w for w in home["widgets"] if w["type"] == "artists")["artists"][0]["name"] == "Artist A"
 
 
 def test_home_updates_after_new_play(alice, lib):
@@ -117,7 +117,7 @@ def test_home_updates_after_new_play(alice, lib):
     first = alice.get("/api/home").json()
     assert alice.get("/api/home").json() == first  # from the cache
     _played(alice, ids, "Epsilon")
-    assert alice.get("/api/home").json()["shelves"][0]["tracks"][0]["title"] == "Epsilon"
+    assert alice.get("/api/home").json()["widgets"][0]["tracks"][0]["title"] == "Epsilon"
 
 
 def test_home_drops_tracks_that_left_the_library(alice, lib):
@@ -126,14 +126,14 @@ def test_home_drops_tracks_that_left_the_library(alice, lib):
     _played(alice, ids, "Epsilon")
     (lib / "b" / "z" / "01.wav").unlink()
     main.library.scan()
-    recent = alice.get("/api/home?refresh=1").json()["shelves"][0]["tracks"]
+    recent = alice.get("/api/home?refresh=1").json()["widgets"][0]["tracks"]
     assert [t["title"] for t in recent] == ["Alpha"]
 
 
 def test_home_is_per_user(alice, bob, lib):
     ids = ids_by_title(alice)
     _played(alice, ids, "Alpha")
-    assert bob.get("/api/home").json()["shelves"][0]["title"] == "Recently added"
+    assert bob.get("/api/home").json()["widgets"][0]["title"] == "Recently added"
 
 
 def test_invalid_ids_rejected(client):
@@ -147,8 +147,8 @@ def test_home_shelf_order_and_covers_for_because_shelves(alice, lib):
     ids = ids_by_title(alice)
     for title in ("Alpha", "Beta", "Gamma"):
         _played(alice, ids, title)
-    shelves = alice.get("/api/home").json()["shelves"]
-    rank = {"recent": 0, "new": 1, "mix": 2, "because": 3}
-    kinds = [s["kind"] for s in shelves]
+    widgets = alice.get("/api/home").json()["widgets"]
+    rank = {"recent": 0, "new": 1, "mix": 2, "friends": 3, "because": 4, "artists": 5}
+    kinds = [w["type"] for w in widgets]
     assert kinds[0] == "recent" and kinds == sorted(kinds, key=rank.get)
-    assert all("thumb" in s for s in shelves if s["kind"] == "because")
+    assert all("thumb" in w for w in widgets if w["type"] == "because")
