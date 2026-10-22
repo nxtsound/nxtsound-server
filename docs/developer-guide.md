@@ -56,6 +56,7 @@ secure by default, and the core stays free of any third-party service.
 | `library.py` | Scans the music folder, reads tags and covers, detects metadata from names, search, "similar tracks". |
 | `autolists.py` | The computed "For you" lists. |
 | `loginalerts.py` | Login alerts: remembers each login (`login_history`) and, if its device or network is new for the user and the first one is long past, leaves a bell message. |
+| `playerhub.py` | Remote control: players with a queue keep a server-sent-events stream (`GET /api/player/events`) and publish their state (`POST /api/player/state`); another device lists them (`GET /api/player/devices`) and sends commands (`POST /api/player/command`) that arrive through the stream. In memory, one server process. |
 | `devices.py` | Browser and system from a User-Agent, for the list of a user's devices (logins). |
 | `bpm.py` | Tempo, beat grid, key and intro/outro analysis for DJ mode (ffmpeg + numpy). |
 | `enrich.py` | Year, cover and artist description from MusicBrainz and the Cover Art Archive. |

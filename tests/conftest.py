@@ -44,6 +44,7 @@ def clean_db():
         for table in ("lib_tracks", "bpm", "lyrics", "stream_stats", "settings", "meta_artist", "meta_album", "plugins", "notifications", "follows"):
             c.execute(f"DELETE FROM {table}")
     main._login_fails.clear()
+    main.playerhub.reset()
     main._home_cache.clear()
     yield
 

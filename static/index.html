@@ -28,6 +28,7 @@
     <div class="topbar">
       <div class="brand" role="link" tabindex="0" aria-label="Home" data-i18n-aria="Home" data-appname>NxtSound</div>
       <button id="searchOpen" class="ibtn" aria-label="Search" data-i18n-aria="Search" data-ic="search"></button>
+      <button id="devBtn" class="ibtn devbtn" aria-label="Other devices" data-i18n-aria="Other devices"><span data-ic="devices"></span><i hidden></i></button>
       <button id="bellBtn" class="ibtn bell" aria-label="Notifications" data-i18n-aria="Notifications"><span data-ic="bell"></span><i id="bellCount" hidden></i></button>
       <button id="userBtn" class="avatar" aria-label="Account" data-i18n-aria="Account">?</button>
     </div>
@@ -65,11 +66,13 @@
         <button id="mPrev" class="ibtn only-desk" aria-label="Previous" data-i18n-aria="Previous" data-ic="prev"></button>
         <button id="mPlay" class="ibtn" aria-label="Play/Pause" data-i18n-aria="Play/Pause"></button>
         <button id="mNext" class="ibtn" aria-label="Next" data-i18n-aria="Next" data-ic="next"></button>
+        <button id="mDevicesM" class="ibtn only-mob" aria-label="Other devices" data-i18n-aria="Other devices" data-ic="devices"></button>
       </div>
       <div class="mextra only-desk">
         <span id="mTime"></span>
         <button id="mMute" class="ibtn" aria-label="Mute" data-i18n-aria="Mute" data-ic="vol"></button>
         <input id="mVol" type="range" min="0" max="1" step="0.01" value="1" aria-label="Volume" data-i18n-aria="Volume">
+        <button id="mDevices" class="ibtn" aria-label="Other devices" data-i18n-aria="Other devices" data-ic="devices"></button>
         <button id="mQueue" class="ibtn" aria-label="Queue" data-i18n-aria="Queue" data-ic="lists"></button>
         <button id="mExpand" class="ibtn" aria-label="Enlarge player" data-i18n-aria="Enlarge player" data-ic="up"></button>
       </div>
@@ -111,6 +114,7 @@
   </div>
   <div class="f-tools">
     <button id="fLyrBtn" class="toolbtn" type="button" aria-label="Lyrics" data-i18n-aria="Lyrics"><span data-ic="lyrics"></span><span data-i18n="Lyrics">Lyrics</span></button>
+    <button id="fDevBtn" class="toolbtn" type="button" aria-label="Other devices" data-i18n-aria="Other devices"><span data-ic="devices"></span><span data-i18n="Devices">Devices</span></button>
     <button id="fDjBtn" class="toolbtn" type="button" aria-label="DJ mode" data-i18n-aria="DJ mode" hidden><span data-ic="disc"></span><span id="fDjLbl">DJ</span></button>
   </div>
   <button id="fQueue" class="f-handle" type="button"><span class="grab"></span><span id="fQueueLabel" data-i18n="Queue">Queue</span></button>
