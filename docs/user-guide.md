@@ -238,6 +238,7 @@ delete an account (including its playlists and history).
 - **Updates**: the server version, "Check for updates", and what is available.
 - **Community**: turn the feature on or off for everyone.
 - **Playing at the same time**: how many streams of one account may play at once (default: no limit) and who plays right now. Every browser tab or app that plays counts. One over the limit gets a message and does not start; the others keep playing.
+- **Login protection**: how many wrong passwords are allowed before an address is blocked and for how long, the blocks running now (with a button to lift each one or all). The defaults are 5 attempts and 5 minutes. A block survives a restart. A block ends by itself; another admin can lift it earlier.
 - **Logging**: choose how much the server logs, per category, and read the latest messages.
 - **Backup**: download or restore a backup of the database.
 

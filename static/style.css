@@ -711,3 +711,8 @@ select option{background:#1c1c1e;color:#fff}
 .dv-vol{display:flex;align-items:center;gap:6px;margin-left:auto;width:36%}
 .dv-vol .ic{width:18px;height:18px;flex:none;opacity:.7}
 .dv-play .ic{width:30px;height:30px}
+/* Login protection (admin, system) */
+.secform{display:flex;flex-direction:column;gap:10px}
+.secform label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--dim)}
+.secform input{max-width:140px}
+.secform .btn{align-self:flex-start}

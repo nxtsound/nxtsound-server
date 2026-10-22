@@ -1169,6 +1169,32 @@ function streamsCard(st) {
     <p class="dim small" style="margin:10px 0 0">${esc(tr('Every player that plays (a browser tab, an app) uses one place of its account, even several in the same login. When the limit is reached, a further player of the account is told so and does not start; the others play on. Pausing or closing the tab frees the place. MAX_STREAMS_PER_USER sets the default.'))}</p></section>`;
 }
 
+// Login protection: how many failed logins are allowed, how long a block lasts, and the blocks running now.
+function securityCard(sec) {
+  const clock = (ts) => new Date(ts * 1000).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+  const rows = sec.blocks.map((b) => `<div class="logrow"><span>${esc(b.ip)} · ${esc(b.name || tr('all names'))} · ${esc(tr('until {time}', { time: clock(b.until) }))}</span>
+    <button class="btn sec" data-act="secUnblock" data-ip="${esc(b.ip)}" data-name="${esc(b.name)}">${esc(tr('Unblock'))}</button></div>`).join('');
+  return `<section class="acard"><h3>${esc(tr('Login protection'))}</h3>
+    <form id="secForm" class="secform">
+      <label>${esc(tr('Failed logins before a block (0 = never block)'))}<input name="max_attempts" type="number" min="0" max="${sec.limits.max_attempts}" value="${sec.max_attempts}" required></label>
+      <label>${esc(tr('Block for (minutes)'))}<input name="block_minutes" type="number" min="1" max="${sec.limits.block_minutes}" value="${sec.block_minutes}" required></label>
+      <button class="btn sec" type="submit">${esc(tr('Save'))}</button></form>
+    <h4>${esc(tr('Blocked now'))}</h4>
+    ${rows || `<div class="sub" style="margin:0">${esc(tr('Nobody is blocked.'))}</div>`}
+    ${sec.blocks.length ? `<div class="actions" style="margin:10px 0 0"><button class="btn sec" data-act="secUnblockAll">${esc(tr('Lift all blocks'))}</button></div>` : ''}
+    <p class="dim small" style="margin:10px 0 0">${esc(tr('After this many failed logins from one address for one name (four times as many across all names) the address is blocked for the time set here. A restart does not lift a block. LOGIN_MAX_ATTEMPTS and LOGIN_BLOCK_MINUTES set the defaults.'))}</p></section>`;
+}
+
+Object.assign(actions, {
+  secUnblock: async (n) => {
+    try { await api('/admin/security/unblock', { json: { ip: n.dataset.ip, name: n.dataset.name } }); route(); } catch (e) { toast(e.message, 3000, true); }
+  },
+  secUnblockAll: async () => {
+    if (!(await uiConfirm(tr('Lift all blocks?')))) return;
+    try { await api('/admin/security/unblock', { json: {} }); route(); } catch (e) { toast(e.message, 3000, true); }
+  },
+});
+
 // Server version and updates (the server looks on GitHub).
 function updatesCard(up) {
   if (!up) return '';
@@ -1186,7 +1212,7 @@ function updatesCard(up) {
 }
 
 async function adminSystem() {
-  const [lib, en, lg, up, com, la, str] = await Promise.all([api('/admin/library'), api('/admin/enrich'), api('/admin/logging'), api('/admin/updates').catch(() => null), api('/admin/community'), api('/admin/login-alerts'), api('/admin/streams')]);
+  const [lib, en, lg, up, com, la, str, sec] = await Promise.all([api('/admin/library'), api('/admin/enrich'), api('/admin/logging'), api('/admin/updates').catch(() => null), api('/admin/community'), api('/admin/login-alerts'), api('/admin/streams'), api('/admin/security')]);
   const sc = lib.scan;
   const enState = !en.enabled ? tr('Off') : en.running ? tr('Looking up …')
     : en.finished ? tr('Last run {when}', { when: ago(en.finished) }) + (en.error ? ' (' + tr('aborted: {why}', { why: en.error }) + ')' : '') : tr('Waiting for the next scan');
@@ -1207,6 +1233,7 @@ async function adminSystem() {
     <div class="actions" style="margin:0"><button class="btn sec" data-act="loginAlertsToggle" data-on="${la.enabled ? '' : '1'}">${esc(la.enabled ? tr('Turn off') : tr('Turn on'))}</button></div>
     <p class="dim small" style="margin:10px 0 0">${esc(tr('A user gets a message in their bell when their account is logged in from a device or a network (address group) they have not used before. The first login of a user raises nothing. LOGIN_ALERTS sets the default.'))}</p></section>
     ${streamsCard(str)}
+    ${securityCard(sec)}
     <section class="acard"><h3>${esc(tr('Community'))}</h3>
     <div class="sub" style="margin:0 0 8px">${esc(com.enabled ? tr('On') : tr('Off'))}${com.enabled ? ' · ' + esc(tr('{n} of {total} users share what they listen to', { n: com.sharing, total: com.users })) : ''}</div>
     <div class="actions" style="margin:0"><button class="btn sec" data-act="communityToggle" data-on="${com.enabled ? '' : '1'}">${esc(com.enabled ? tr('Turn off') : tr('Turn on'))}</button></div>
@@ -1397,6 +1424,15 @@ $('#view').addEventListener('submit', async (e) => {
   if (f.id === 'streamForm') {  // parallel playback limit in the admin area
     e.preventDefault();
     try { await api('/admin/streams', { method: 'PUT', json: { max_streams: Number(f.elements.max_streams.value) } }); toast(tr('Saved')); route(); } catch (er) { toast(er.message, 3000, true); }
+    return;
+  }
+  if (f.id === 'secForm') {  // login protection in the admin area
+    e.preventDefault();
+    try {
+      await api('/admin/security', { method: 'PUT', json: { max_attempts: Number(f.elements.max_attempts.value), block_minutes: Number(f.elements.block_minutes.value) } });
+      toast(tr('Saved'));
+      route();
+    } catch (er) { toast(er.message, 3000, true); }
     return;
   }
   if (f.id === 'nameForm') {

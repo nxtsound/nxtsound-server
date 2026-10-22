@@ -23,7 +23,7 @@ def test_login_needs_correct_password(anon):
 
 def test_login_is_throttled(anon):
     main.db.create_user("Chef", PW)
-    for _ in range(main.LOGIN_MAX_FAILS):
+    for _ in range(main.loginguard.settings()[0]):
         assert anon.post("/api/login", json={"name": "Chef", "password": "nope-nope"}).status_code == 401
     assert anon.post("/api/login", json={"name": "Chef", "password": PW}).status_code == 429  # even the right one is blocked
 
