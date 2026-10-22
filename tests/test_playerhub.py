@@ -73,6 +73,7 @@ def test_state_that_stops_coming_no_longer_counts_as_playing(alice, monkeypatch)
 def test_a_command_reaches_the_target(alice):
     c = _login()
     target = _connect(c, "tab-000001")
+    _drain(target)  # what it was told on connecting
     r = c.post("/api/player/command", json={"target": "tab-000001", "cmd": "seek", "value": 42})
     assert r.status_code == 200
     assert target.queue.get_nowait() == {"event": "command", "data": {"cmd": "seek", "value": 42}}
@@ -109,7 +110,7 @@ def test_a_device_that_was_logged_out_gets_no_commands(alice):
 def test_a_slow_player_is_reported_busy(alice, monkeypatch):
     monkeypatch.setattr(playerhub, "QUEUE_SIZE", 2)
     c = _login()
-    _connect(c, "tab-000001")
+    _drain(_connect(c, "tab-000001"))
     codes = [c.post("/api/player/command", json={"target": "tab-000001", "cmd": "toggle"}).status_code for _ in range(3)]
     assert codes == [200, 200, 409]
 
@@ -118,7 +119,7 @@ def test_a_reconnect_replaces_the_old_stream(alice):
     c = _login()
     first = _connect(c, "tab-000001")
     second = _connect(c, "tab-000001")
-    assert first.queue.get_nowait() is None  # the old stream is told to end
+    assert None in _drain(first)  # the old stream is told to end
     uid = main.db.find_user("Alice")["id"]
     playerhub.disconnect(uid, "tab-000001", first)  # the old one closing must not remove the new one
     assert playerhub.session_of(uid, "tab-000001") == _sid(c) and second
@@ -155,6 +156,75 @@ def test_the_event_stream_sends_commands_and_ends_with_the_login():
         q.put_nowait({"event": "command", "data": {"cmd": "next", "value": None}})
         chunk = await events.__anext__()
         assert chunk.startswith("event: command\n") and json.loads(chunk.split("data: ")[1]) == {"cmd": "next", "value": None}
+        q.put_nowait(None)
+        assert [c async for c in events] == []
+    asyncio.run(run())
+
+
+def _drain(p):
+    out = []
+    while not p.queue.empty():
+        out.append(p.queue.get_nowait())
+    return out
+
+
+def _devices_events(p):
+    return [m["data"] for m in _drain(p) if m and m["event"] == "devices"]
+
+
+def test_the_other_devices_hear_when_a_player_starts_and_stops(alice):
+    c = _login()
+    mac, phone = _connect(c, "mac-000001"), _connect(c, "phone-00001")
+    _drain(mac), _drain(phone)
+    _state(c, "mac-000001")
+    heard = _devices_events(phone)
+    assert [d["player"] for d in heard[-1]] == ["mac-000001"] and heard[-1][0]["playing"] is True
+    assert _devices_events(mac) == []  # the player itself is not told about itself
+    _state(c, "mac-000001", playing=False)
+    assert _devices_events(phone)[-1][0]["playing"] is False
+    uid = main.db.find_user("Alice")["id"]
+    playerhub.disconnect(uid, "mac-000001", mac)  # the tab was closed
+    assert _devices_events(phone)[-1] == []
+
+
+def test_a_new_connection_is_told_who_plays(alice):
+    c = _login()
+    mac = _connect(c, "mac-000001")
+    _state(c, "mac-000001")
+    phone = _connect(c, "phone-00001")
+    assert [d["player"] for d in _devices_events(phone)[-1]] == ["mac-000001"]
+    assert mac.queue.empty() or all(m["event"] == "devices" for m in _drain(mac))
+
+
+def test_only_real_changes_are_pushed(alice):
+    c = _login()
+    mac, phone = _connect(c, "mac-000001"), _connect(c, "phone-00001")
+    _state(c, "mac-000001")
+    _drain(phone)
+    for pos in (30, 60, 90):  # the position ticks on: nothing to tell
+        c.post("/api/player/state", json={"player": "mac-000001", "playing": True, "track": TRACK, "position": pos, "duration": 200, "volume": 0.8})
+    assert _devices_events(phone) == []
+    _state(c, "mac-000001", track={**TRACK, "id": "test:00000002"})  # another song: now there is news
+    assert len(_devices_events(phone)) == 1
+
+
+def test_a_player_that_stopped_reporting_is_noticed_by_the_sweep(alice, monkeypatch):
+    c = _login()
+    _connect(c, "mac-000001"); phone = _connect(c, "phone-00001")
+    _state(c, "mac-000001")
+    _drain(phone)
+    monkeypatch.setattr(playerhub, "STATE_TTL", -1)
+    uid = main.db.find_user("Alice")["id"]
+    playerhub.refresh(uid, "phone-00001")  # what the stream does every 20 s
+    assert _devices_events(phone)[-1][0]["playing"] is False
+
+
+def test_the_stream_sweeps_for_its_player():
+    """The ping interval also refreshes the device list; here without a network and with a login that is gone."""
+    async def run():
+        q = asyncio.Queue()
+        events = main._player_events(q, session=999999, user_id=1, player="x" * 10)
+        assert await events.__anext__() == ": connected\n\n"
         q.put_nowait(None)
         assert [c async for c in events] == []
     asyncio.run(run())

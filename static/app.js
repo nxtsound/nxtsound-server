@@ -2415,18 +2415,24 @@ function remoteSoon() { clearTimeout(REMOTE.t); REMOTE.t = setTimeout(remotePubl
 function remoteStop() {
   clearTimeout(REMOTE.t);
   if (REMOTE.es) { REMOTE.es.close(); REMOTE.es = null; }
+  DEVS.list = [];
+  updateDevDot();
 }
+// The stream is open while the page is visible or has a queue (to be steered), so the devices button and the sheet update by themselves.
 function remoteSync() {
-  if (!S.user || !S.queue.length) { remoteStop(); return; }
+  const wanted = S.user && (document.visibilityState === 'visible' || S.queue.length);
+  if (!wanted) { remoteStop(); return; }
   if (!REMOTE.es && window.EventSource) {
     const es = new EventSource('/api/player/events?player=' + encodeURIComponent(PLAYER_ID));
     REMOTE.es = es;
     es.onopen = () => { REMOTE.force = true; remoteSoon(); };
     es.addEventListener('command', (e) => { try { remoteCommand(JSON.parse(e.data)); } catch (_) { /* not ours */ } });
+    es.addEventListener('devices', (e) => { try { DEVS.list = JSON.parse(e.data); DEVS.got = Date.now() / 1000; updateDevDot(); drawDevices(); } catch (_) { /* not ours */ } });
     es.onerror = () => { if (es.readyState === EventSource.CLOSED && REMOTE.es === es) REMOTE.es = null; };  // refused (login gone, too many players): no retry loop
   }
   remoteSoon();
 }
+document.addEventListener('visibilitychange', remoteSync);
 function remoteCommand({ cmd, value }) {
   if (!currentTrack()) return;
   if (cmd === 'toggle') togglePlay();
@@ -2497,16 +2503,8 @@ $('#sheet .panel').addEventListener('change', (e) => {
   else if (e.target.classList.contains('dv-volume')) deviceCommand(dv.dataset.player, 'volume', +e.target.value);
 });
 ['#mDevices', '#mDevicesM', '#fDevBtn', '#devBtn'].forEach((sel) => { $(sel).onclick = openDevices; });
-// The header button shows a dot while another device of the account plays (asked every 20 s, only while the page is visible)
-async function checkDevices() {
-  if (!S.user || document.visibilityState !== 'visible') return;
-  try {
-    const { devices } = await api('/player/devices?player=' + encodeURIComponent(PLAYER_ID), { noRedirect: true }, 8000);
-    $('#devBtn i').hidden = !devices.some((d) => d.playing);
-  } catch (_) { /* optional */ }
-}
-setInterval(checkDevices, 20000);
-document.addEventListener('visibilitychange', checkDevices);
+// The header button shows a pulsing dot while another device of the account plays: it appears and disappears as soon as the server says so
+function updateDevDot() { $('#devBtn i').classList.toggle('on', DEVS.list.some((d) => d.playing)); }
 
 // Progress bar of the player bar (desktop) for jumping
 $('#mProgWrap').addEventListener('click', (e) => {
@@ -3354,7 +3352,7 @@ function boot(user) {
   S.user = user;
   loadSources();
   loadBell();
-  checkDevices();
+  remoteSync();
   loadCommunity();
   $('#login').hidden = true;
   $('#app').hidden = false;

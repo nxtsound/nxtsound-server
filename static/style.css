@@ -651,7 +651,12 @@ select option{background:#1c1c1e;color:#fff}
 
 /* The bell */
 .bell,.devbtn{position:relative}
-.devbtn i{position:absolute;top:6px;right:5px;width:9px;height:9px;border-radius:50%;background:#3ddc84;box-shadow:0 0 0 2px #000}
+.devbtn i{position:absolute;top:6px;right:5px;width:9px;height:9px;border-radius:50%;background:#3ddc84;box-shadow:0 0 0 2px #000;opacity:0;transform:scale(0);transition:opacity .25s ease,transform .35s cubic-bezier(.34,1.56,.64,1);pointer-events:none}
+.devbtn i::after{content:"";position:absolute;inset:0;border-radius:50%;background:#3ddc84;opacity:0}
+.devbtn i.on{opacity:1;transform:scale(1)}
+.devbtn i.on::after{animation:devpulse 2.2s ease-out infinite}
+@keyframes devpulse{0%{transform:scale(1);opacity:.55}100%{transform:scale(2.8);opacity:0}}
+@media (prefers-reduced-motion:reduce){.devbtn i,.devbtn i::after{transition:none;animation:none!important}}
 .bell i{position:absolute;top:3px;right:1px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--red);color:#fff;font:700 10px/16px -apple-system,sans-serif;font-style:normal;text-align:center}
 .bell.has svg{animation:bell-ring .9s ease 1}
 @keyframes bell-ring{0%,100%{transform:rotate(0)}15%{transform:rotate(14deg)}30%{transform:rotate(-12deg)}45%{transform:rotate(8deg)}60%{transform:rotate(-5deg)}}
