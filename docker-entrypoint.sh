@@ -7,6 +7,9 @@ if [ "$(id -u)" = "0" ]; then
     for dir in /data /plugins; do
         [ -d "$dir" ] && chown -R app:app "$dir" 2>/dev/null || echo "docker-entrypoint: could not change the owner of $dir (continuing)" >&2
     done
+    if [ -d /backups ]; then  # the folder for backups to "a folder on the server": only the folder itself (an NFS share may not allow more)
+        chown app:app /backups 2>/dev/null || echo "docker-entrypoint: could not change the owner of /backups (continuing)" >&2
+    fi
     if [ "${MUSIC_ACCESS:-ro}" = "rw" ] && [ -d /music ]; then  # plugins keep songs in /music/<plugin>/: the folder itself must be writable (not recursive)
         chown app:app /music 2>/dev/null || echo "docker-entrypoint: could not change the owner of /music (continuing)" >&2
     fi

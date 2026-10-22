@@ -53,6 +53,8 @@ Settings marked **admin area** can also be changed at runtime there, and the adm
 
 | Variable | Default | Meaning |
 |---|---|---|
+| `BACKUP_PATH` (Docker) | `./backups` | A folder on the host, mounted at `/backups`: choose "Folder on the server" with the path `/backups` as the destination of a backup. Put an NFS share here (mounted on the host) to back up to a NAS. |
+| `BACKUPS_ON_START` | `1` | `0` does not start the schedule of the backups to other places (tests). |
 | `PLUGINS_PATH` (Docker) | `./plugins` | The folder on the host that is mounted at `/plugins`. |
 | `PLUGINS_DIR` | `/plugins` in Docker | Where the server looks for plugin folders. |
 | `PLUGIN_DATA_DIR` | `<data>/plugin-data` | Writable data of each plugin. |
