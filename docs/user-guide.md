@@ -200,6 +200,10 @@ With DJ mode on, the radio orders songs into a chain with matching tempo and com
 into the next on the beat. The server analyzes tracks in the background after each scan (turn off with `ANALYZE=0`). DJ mode is off
 on iPhones and iPads, where the system does not allow precise timing for background audio.
 
+**Crossfade:** in the DJ menu (tap the DJ button in the big player) choose the style *Crossfade* to simply fade one song out while the next fades in, without matching the tempo.
+The length (3, 6, 9 or 12 seconds) is in the same menu. With the option *Crossfade songs that cannot be matched on the beat* switched on (the default), the other styles fall back to a
+crossfade when two songs do not fit, instead of cutting from one to the next. Very short songs (under 30 seconds) and live streams are never blended.
+
 ### Playlists and likes
 
 - **Playlists** → *New playlist*, or use "Add to playlist" in any ⋮ menu. Rename or delete a playlist on its own page, and remove songs with their ⋮ menu.
