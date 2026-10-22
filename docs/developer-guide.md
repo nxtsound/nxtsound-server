@@ -55,6 +55,7 @@ secure by default, and the core stays free of any third-party service.
 | `db.py` | SQLite schema, migrations and every query (the only module that writes SQL for app data). |
 | `library.py` | Scans the music folder, reads tags and covers, detects metadata from names, search, "similar tracks". |
 | `autolists.py` | The computed "For you" lists. |
+| `loginalerts.py` | Login alerts: remembers each login (`login_history`) and, if its device or network is new for the user and the first one is long past, leaves a bell message. |
 | `devices.py` | Browser and system from a User-Agent, for the list of a user's devices (logins). |
 | `bpm.py` | Tempo, beat grid, key and intro/outro analysis for DJ mode (ffmpeg + numpy). |
 | `enrich.py` | Year, cover and artist description from MusicBrainz and the Cover Art Archive. |
@@ -163,6 +164,7 @@ SQLite file at `DB_PATH`, WAL mode, foreign keys on (deleting a user cascades).
 | Table | Holds |
 |---|---|
 | `users` | name, password hash (scrypt), `is_admin`, language, onboarding and "what's new" state, `notif_seen`, `share_listening` |
+| `login_history` | the last 200 logins per user: time, IP, network (IPv4 /24, IPv6 /48), browser, system; what counts as "usual" for the login alerts |
 | `sessions` | hashed cookie token, user, CSRF token, created and last-seen time; for the device list: the name the user gave, User-Agent, IP at login and at last use, last activity (minute accuracy). Listed and ended through `/api/me/sessions` |
 | `lib_tracks` | the library index (path, tags, duration, mtime/size, …) |
 | `meta_artist`, `meta_album` | enrichment results (including misses) |

@@ -1173,7 +1173,7 @@ function updatesCard(up) {
 }
 
 async function adminSystem() {
-  const [lib, en, lg, up, com] = await Promise.all([api('/admin/library'), api('/admin/enrich'), api('/admin/logging'), api('/admin/updates').catch(() => null), api('/admin/community')]);
+  const [lib, en, lg, up, com, la] = await Promise.all([api('/admin/library'), api('/admin/enrich'), api('/admin/logging'), api('/admin/updates').catch(() => null), api('/admin/community'), api('/admin/login-alerts')]);
   const sc = lib.scan;
   const enState = !en.enabled ? tr('Off') : en.running ? tr('Looking up …')
     : en.finished ? tr('Last run {when}', { when: ago(en.finished) }) + (en.error ? ' (' + tr('aborted: {why}', { why: en.error }) + ')' : '') : tr('Waiting for the next scan');
@@ -1189,6 +1189,10 @@ async function adminSystem() {
     <div class="actions" style="margin:0"><button class="btn sec" data-act="enrichToggle" data-on="${en.enabled ? '' : '1'}">${esc(en.enabled ? tr('Turn off') : tr('Turn on'))}</button><button class="btn sec" data-act="enrichRun"${en.enabled && !en.running ? '' : ' disabled'}>${esc(tr('Look up now'))}</button></div>
     <p class="dim small" style="margin:10px 0 0">${esc(tr('Fills in missing release year, cover and a short description from {source}. Only artist and album names are sent. Existing tags and covers stay unchanged.', { source: en.source }))}${en.from_admin ? '' : ' ' + esc(tr('Default from the environment variable')) + ' <code>ENRICH</code>.'}</p></section>
     ${updatesCard(up)}
+    <section class="acard"><h3>${esc(tr('Login alerts'))}</h3>
+    <div class="sub" style="margin:0 0 8px">${esc(la.enabled ? tr('On') : tr('Off'))}</div>
+    <div class="actions" style="margin:0"><button class="btn sec" data-act="loginAlertsToggle" data-on="${la.enabled ? '' : '1'}">${esc(la.enabled ? tr('Turn off') : tr('Turn on'))}</button></div>
+    <p class="dim small" style="margin:10px 0 0">${esc(tr('A user gets a message in their bell when their account is logged in from a device or a network (address group) they have not used before. The first login of a user raises nothing. LOGIN_ALERTS sets the default.'))}</p></section>
     <section class="acard"><h3>${esc(tr('Community'))}</h3>
     <div class="sub" style="margin:0 0 8px">${esc(com.enabled ? tr('On') : tr('Off'))}${com.enabled ? ' · ' + esc(tr('{n} of {total} users share what they listen to', { n: com.sharing, total: com.users })) : ''}</div>
     <div class="actions" style="margin:0"><button class="btn sec" data-act="communityToggle" data-on="${com.enabled ? '' : '1'}">${esc(com.enabled ? tr('Turn off') : tr('Turn on'))}</button></div>
@@ -1318,6 +1322,9 @@ Object.assign(actions, {
   follow: async (n) => {
     n.disabled = true;
     try { await api('/community/follow/' + n.dataset.id, { method: n.dataset.on ? 'POST' : 'DELETE' }); route(); } catch (e) { toast(e.message, 3000, true); n.disabled = false; }
+  },
+  loginAlertsToggle: async (n) => {
+    try { await api('/admin/login-alerts', { method: 'PUT', json: { enabled: !!n.dataset.on } }); route(); } catch (e) { toast(e.message, 3000, true); }
   },
   communityToggle: async (n) => {
     try { await api('/admin/community', { method: 'PUT', json: { enabled: !!n.dataset.on } }); await loadCommunity(); route(); } catch (e) { toast(e.message, 3000, true); }

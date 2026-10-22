@@ -6,6 +6,7 @@ minor versions may contain breaking changes, which are called out.
 ## [Unreleased]
 
 ### Added
+- **Login alerts:** when an account is logged in from a device (browser and system) or a network (address group) the user has not used before, they get a message in their bell that links to *Account → Devices*. The very first login of a user raises nothing. Admin area → System → Login alerts turns it off (`LOGIN_ALERTS`).
 - **Devices:** Account → Devices lists every browser and app you are logged in on (name, browser and system, when you logged in, when it was last used, IP address). Give a device a name, log a single device out, or log out everywhere else.
 
 ## [0.2.0] – 2026-10-21
