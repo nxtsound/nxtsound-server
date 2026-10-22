@@ -18,6 +18,7 @@ minor versions may contain breaking changes, which are called out.
 
 ### Changed
 - **Calmer home page:** "Recently played" is smaller (2 x 2 per page, three pages at most), "Recently added" comes right after it instead of at the bottom, "Your Mix" spans the full width and keeps its red divider, and each "Because you listened to ..." shelf starts with the cover of its song.
+- The **Playlists** page now shows only *Liked songs* and your own playlists. The computed "For you" lists (*Most played*, *Rediscover*, genre and decade mixes, artist mixes) are no longer listed there.
 
 ### Fixed
 - `Esc` closed a window and the big player behind it at the same time; now it closes one thing per press.

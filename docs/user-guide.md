@@ -209,8 +209,8 @@ crossfade when two songs do not fit, instead of cutting from one to the next. Ve
 
 - **Playlists** → *New playlist*, or use "Add to playlist" in any ⋮ menu. Rename or delete a playlist on its own page, and remove songs with their ⋮ menu.
 - **Liked songs** collects everything you liked with ♥.
-- **For you** (under Playlists) holds lists that are computed fresh on every visit from your history: *Most played*, *Rediscover*
-  (not heard for 30 days), *Mix: Artist* for your top artists, *genre mixes*, *decades* and *Recently added*. "Save as playlist" keeps one for good.
+- **Computed lists** are made fresh on every visit from your history: *Most played*, *Rediscover* (not heard for 30 days), *Mix: Artist* for your top artists, *genre mixes*, *decades*
+  and *Recently added*. They are not on the Playlists page (which shows only your own playlists and your liked songs); open them from the home page sections. "Save as playlist" on a list keeps it for good.
 
 ### Your recap (alpha)
 
