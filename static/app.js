@@ -125,6 +125,7 @@ const PATHS = {
   friends: 'M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z',
   phone: 'M17 1.01 7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z',
   computer: 'M21 2H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7l-2 3v1h8v-1l-2-3h7c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 12H3V4h18v10z',
+  devices: 'M4 6h18V4H4c-1.1 0-2 .9-2 2v11H0v3h14v-3H4V6zm19 2h-6c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h6c.55 0 1-.45 1-1V9c0-.55-.45-1-1-1zm-1 9h-4v-7h4v7z',
   lists: 'M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z',
 };
 const SPIN = '<svg class="ic spinner" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="38 100"/></svg>';
@@ -1806,6 +1807,7 @@ function playIndex(i, opts = {}) {
   if (!opts.mix) { S.stRetry = 0; S.t0 = performance.now(); }
   S.idx = i;
   S.reported = false;
+  remoteSync();
   const t = S.queue[i];
   if (!opts.mix) {  // during a DJ transition the track is already playing on the other element
     const prevBlob = S.curBlob || '';
@@ -2390,6 +2392,121 @@ $('#mQueue').onclick = () => { openFull(); openQueue(); };
     if (audio.volume > 0) { S.premute = audio.volume; apply(0); } else apply(S.premute || 0.8);
   };
 })();
+
+// ---------- Remote control: steer the player of another device, and be steered ----------
+// A player that has a queue keeps an event stream open and publishes what it plays; commands of other devices of the same account arrive through it.
+// Idle players hold no connection: the list of devices is asked for only while the devices sheet is open.
+const PLAYER_ID = (crypto.randomUUID ? crypto.randomUUID() : Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join(''));  // this tab or app, new with every load
+const REMOTE = { es: null, t: 0, sent: '' };
+function remoteState() {
+  const t = currentTrack();
+  return { player: PLAYER_ID, playing: !audio.paused && !audio.ended && !S.restored, position: audio.currentTime || 0, duration: Number.isFinite(audio.duration) ? audio.duration : 0, volume: audio.volume,
+    track: t ? { id: t.id, title: t.title || '', artist: t.artist || '', thumb: (t.thumb && (t.thumb.startsWith('https://') || t.thumb.startsWith('/api/cover/'))) ? t.thumb : '' } : null };
+}
+function remotePublish() {
+  if (!REMOTE.es || !S.user) return;
+  const st = remoteState();
+  const sig = JSON.stringify([st.playing, st.track && st.track.id, Math.round(st.position / 5), Math.round(st.volume * 20)]);
+  if (sig === REMOTE.sent && !REMOTE.force) return;
+  REMOTE.sent = sig; REMOTE.force = false;
+  api('/player/state', { json: st }, 8000).catch(() => {});
+}
+function remoteSoon() { clearTimeout(REMOTE.t); REMOTE.t = setTimeout(remotePublish, 350); }
+function remoteStop() {
+  clearTimeout(REMOTE.t);
+  if (REMOTE.es) { REMOTE.es.close(); REMOTE.es = null; }
+}
+function remoteSync() {
+  if (!S.user || !S.queue.length) { remoteStop(); return; }
+  if (!REMOTE.es && window.EventSource) {
+    const es = new EventSource('/api/player/events?player=' + encodeURIComponent(PLAYER_ID));
+    REMOTE.es = es;
+    es.onopen = () => { REMOTE.force = true; remoteSoon(); };
+    es.addEventListener('command', (e) => { try { remoteCommand(JSON.parse(e.data)); } catch (_) { /* not ours */ } });
+    es.onerror = () => { if (es.readyState === EventSource.CLOSED && REMOTE.es === es) REMOTE.es = null; };  // refused (login gone, too many players): no retry loop
+  }
+  remoteSoon();
+}
+function remoteCommand({ cmd, value }) {
+  if (!currentTrack()) return;
+  if (cmd === 'toggle') togglePlay();
+  else if (cmd === 'play') { if (audio.paused) togglePlay(); }
+  else if (cmd === 'pause') { if (!audio.paused) audio.pause(); }
+  else if (cmd === 'next') next();
+  else if (cmd === 'prev') prev();
+  else if (cmd === 'seek' && Number.isFinite(audio.duration) && value !== null) audio.currentTime = Math.max(0, Math.min(value, audio.duration - 0.5));
+  else if (cmd === 'volume' && value !== null && S.setVol) S.setVol(Math.max(0, Math.min(1, value)));
+  REMOTE.force = true;
+  remoteSoon();
+}
+['playing', 'pause', 'ended', 'seeked', 'volumechange'].forEach((ev) => audio.addEventListener(ev, () => { REMOTE.force = true; remoteSoon(); }));
+setInterval(() => { if (REMOTE.es && !audio.paused) remotePublish(); }, 10000);
+
+// The devices sheet: the other players of this account, with their own controls. The list is asked for every 3 s while the sheet is open.
+const DEVS = { list: [], sig: '', timer: 0, tick: 0, got: 0 };
+function devicePosition(d) { return Math.max(0, Math.min(d.duration || 1e9, d.position + (d.playing ? (Date.now() / 1000 - DEVS.got + d.age) : 0))); }
+function deviceHtml(d) {
+  return `<div class="dv" data-player="${esc(d.player)}">${cover(d.track.thumb)}
+    <div class="dv-body"><div class="dv-name">${esc(d.name || deviceLabel(d))}</div>
+    <div class="dv-track">${esc(d.track.title)}${d.track.artist ? ' · ' + esc(d.track.artist) : ''}</div>
+    <div class="dv-bar"><input type="range" class="dv-seek" min="0" max="${Math.max(1, Math.round(d.duration))}" step="1" value="${Math.round(devicePosition(d))}" ${d.duration ? '' : 'disabled'} aria-label="${esc(tr('Position'))}"></div>
+    <div class="dv-ctl"><button class="ibtn" data-dv="prev" aria-label="${esc(tr('Previous'))}">${IC.prev}</button><button class="ibtn dv-play" data-dv="toggle" aria-label="${esc(tr('Play/Pause'))}">${d.playing ? IC.pause : IC.play}</button><button class="ibtn" data-dv="next" aria-label="${esc(tr('Next'))}">${IC.next}</button>
+    <span class="dv-vol">${IC.vol}<input type="range" class="dv-volume" min="0" max="1" step="0.01" value="${d.volume}" aria-label="${esc(tr('Volume'))}"></span></div></div></div>`;
+}
+function drawDevices() {
+  const box = $('#sheet .dvlist');
+  if (!box) return;
+  const sig = JSON.stringify(DEVS.list.map((d) => [d.player, d.track.id, d.playing, d.name, d.duration]));
+  if (sig !== DEVS.sig) {  // redraw only when something changed, so a slider you are dragging stays put
+    DEVS.sig = sig;
+    box.innerHTML = DEVS.list.length ? DEVS.list.map(deviceHtml).join('') : `<div class="empty" style="padding:18px 8px">${esc(tr('No other device is playing right now. Start playing on another device of yours and it shows up here.'))}</div>`;
+  }
+}
+async function loadDevices() {
+  try {
+    const { devices } = await api('/player/devices?player=' + encodeURIComponent(PLAYER_ID), {}, 8000);
+    DEVS.list = devices; DEVS.got = Date.now() / 1000;
+    drawDevices();
+  } catch (_) { /* try again at the next tick */ }
+}
+function openDevices() {
+  openSheet(`<div class="sh-title">${esc(tr('Other devices'))}</div><div class="dim small" style="padding:0 4px 10px">${esc(tr('Control what plays on your other devices. Playing something here does not stop them.'))}</div><div class="dvlist"></div>`);
+  DEVS.sig = ''; DEVS.list = [];
+  loadDevices();
+  clearInterval(DEVS.timer); clearInterval(DEVS.tick);
+  DEVS.timer = setInterval(loadDevices, 3000);
+  DEVS.tick = setInterval(() => {  // the progress of playing devices moves on by itself between two answers
+    document.querySelectorAll('#sheet .dv').forEach((el) => {
+      const d = DEVS.list.find((x) => x.player === el.dataset.player), r = el.querySelector('.dv-seek');
+      if (d && r && d.playing && document.activeElement !== r) r.value = Math.round(devicePosition(d));
+    });
+  }, 1000);
+  S.sheetClose = () => { clearInterval(DEVS.timer); clearInterval(DEVS.tick); };
+}
+async function deviceCommand(player, cmd, value = null) {
+  try { await api('/player/command', { json: { target: player, cmd, value } }, 8000); setTimeout(loadDevices, 600); } catch (e) { toast(e.message, 3000, true); loadDevices(); }
+}
+$('#sheet .panel').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-dv]');
+  if (b) deviceCommand(b.closest('.dv').dataset.player, b.dataset.dv);
+});
+$('#sheet .panel').addEventListener('change', (e) => {
+  const dv = e.target.closest && e.target.closest('.dv');
+  if (!dv) return;
+  if (e.target.classList.contains('dv-seek')) deviceCommand(dv.dataset.player, 'seek', +e.target.value);
+  else if (e.target.classList.contains('dv-volume')) deviceCommand(dv.dataset.player, 'volume', +e.target.value);
+});
+['#mDevices', '#mDevicesM', '#fDevBtn', '#devBtn'].forEach((sel) => { $(sel).onclick = openDevices; });
+// The header button shows a dot while another device of the account plays (asked every 20 s, only while the page is visible)
+async function checkDevices() {
+  if (!S.user || document.visibilityState !== 'visible') return;
+  try {
+    const { devices } = await api('/player/devices?player=' + encodeURIComponent(PLAYER_ID), { noRedirect: true }, 8000);
+    $('#devBtn i').hidden = !devices.some((d) => d.playing);
+  } catch (_) { /* optional */ }
+}
+setInterval(checkDevices, 20000);
+document.addEventListener('visibilitychange', checkDevices);
 
 // Progress bar of the player bar (desktop) for jumping
 $('#mProgWrap').addEventListener('click', (e) => {
@@ -3133,6 +3250,7 @@ function showUnreachable() {
 }
 
 function showLogin() {
+  remoteStop();
   document.body.classList.remove('has-track');
   S.restored = null;
   S.user = null;
@@ -3236,6 +3354,7 @@ function boot(user) {
   S.user = user;
   loadSources();
   loadBell();
+  checkDevices();
   loadCommunity();
   $('#login').hidden = true;
   $('#app').hidden = false;

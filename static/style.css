@@ -409,6 +409,7 @@ body.tour-open{overflow:hidden}
   #view{padding:0 max(24px,calc((100% - 1040px)/2)) 32px}
   .sect,.sect-flat{margin-left:0;margin-right:0}
   .only-desk{display:flex}
+  .only-mob{display:none!important}
   #mini{grid-area:mini;position:relative;left:auto;right:auto;bottom:auto}
   #mProgWrap{height:4px;cursor:pointer}
   #mProgWrap:hover{height:6px}
@@ -649,7 +650,8 @@ select option{background:#1c1c1e;color:#fff}
 .sheet-link{display:inline-block}
 
 /* The bell */
-.bell{position:relative}
+.bell,.devbtn{position:relative}
+.devbtn i{position:absolute;top:6px;right:5px;width:9px;height:9px;border-radius:50%;background:#3ddc84;box-shadow:0 0 0 2px #000}
 .bell i{position:absolute;top:3px;right:1px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--red);color:#fff;font:700 10px/16px -apple-system,sans-serif;font-style:normal;text-align:center}
 .bell.has svg{animation:bell-ring .9s ease 1}
 @keyframes bell-ring{0%,100%{transform:rotate(0)}15%{transform:rotate(14deg)}30%{transform:rotate(-12deg)}45%{transform:rotate(8deg)}60%{transform:rotate(-5deg)}}
@@ -691,3 +693,16 @@ select option{background:#1c1c1e;color:#fff}
 .dev-act{flex:none;display:flex;flex-direction:column;gap:6px}
 .dev-act .btn{padding:6px 14px;font-size:13px}
 @media (max-width:560px){.dev{flex-wrap:wrap}.dev-act{flex-direction:row;width:100%}.dev-act .btn{flex:1}}
+
+/* Other devices (remote control) */
+.dvlist{display:flex;flex-direction:column;gap:10px}
+.dv{display:flex;gap:12px;background:rgba(255,255,255,.05);border-radius:14px;padding:10px}
+.dv>img,.dv>.ph{width:64px;height:64px;border-radius:8px;object-fit:cover;flex:none;background:var(--card)}
+.dv-body{flex:1;min-width:0}
+.dv-name{font-size:12px;color:var(--dim);font-weight:600}
+.dv-track{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dv-bar input[type=range],.dv-vol input[type=range]{width:100%;accent-color:#fff}
+.dv-ctl{display:flex;align-items:center;gap:2px}
+.dv-vol{display:flex;align-items:center;gap:6px;margin-left:auto;width:36%}
+.dv-vol .ic{width:18px;height:18px;flex:none;opacity:.7}
+.dv-play .ic{width:30px;height:30px}

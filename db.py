@@ -508,7 +508,7 @@ def user_for_token(token: str, ttl: int | None = None, max_age: int | None = Non
     now = _now()
     with db() as c:
         row = c.execute(
-            "SELECT u.id, u.name, u.is_admin, u.onboarded, u.pw_hash, u.created_at, u.pw_temp, u.last_active, u.lang, s.last_seen, s.csrf, s.created_at AS started, s.active_at, s.last_ip "
+            "SELECT u.id, u.name, u.is_admin, u.onboarded, u.pw_hash, u.created_at, u.pw_temp, u.last_active, u.lang, s.last_seen, s.csrf, s.created_at AS started, s.active_at, s.last_ip, s.rowid AS sid "
             "FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?",
             (_sid(token),),
         ).fetchone()
@@ -524,7 +524,7 @@ def user_for_token(token: str, ttl: int | None = None, max_age: int | None = Non
             c.execute("UPDATE sessions SET active_at = ?, last_ip = ? WHERE token = ?", (now, ip or row["last_ip"], _sid(token)))
         if now - row["last_active"] > ACTIVE_TOUCH:
             c.execute("UPDATE users SET last_active = ? WHERE id = ?", (now, row["id"]))
-    return {**_user(row), "_renew": renew, "csrf": row["csrf"]}
+    return {**_user(row), "_renew": renew, "csrf": row["csrf"], "sid": row["sid"]}
 
 
 def purge_sessions(ttl: int, max_age: int = 0) -> int:
@@ -642,6 +642,11 @@ def end_session(user_id: int, session_id: int, keep_token: str = "") -> str:
             return "current"
         c.execute("DELETE FROM sessions WHERE rowid = ?", (session_id,))
     return "ok"
+
+
+def session_exists(session_id: int) -> bool:
+    with db() as c:
+        return c.execute("SELECT 1 FROM sessions WHERE rowid = ?", (session_id,)).fetchone() is not None
 
 
 def end_other_sessions(user_id: int, keep_token: str) -> int:

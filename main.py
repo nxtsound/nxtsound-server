@@ -42,6 +42,7 @@ import loginalerts
 import pluginhost
 import plugins
 import library
+import playerhub
 import pluginproto
 import sysmon
 from i18n import tr
@@ -386,6 +387,96 @@ def logout(request: Request, response: Response):
     if token:
         db.delete_session(token)
     response.delete_cookie(SESSION_COOKIE, path="/")
+    return {"ok": True}
+
+
+# ---------- Remote control: playing on one device, steering from another (see playerhub.py) ----------
+
+class PlayerStateIn(BaseModel):
+    player: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    playing: bool
+    track: Track | None = None
+    position: float = Field(0, ge=0, le=86400)
+    duration: float = Field(0, ge=0, le=86400)
+    volume: float = Field(1, ge=0, le=1)
+
+
+class PlayerCommandIn(BaseModel):
+    target: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    cmd: Literal["play", "pause", "toggle", "next", "prev", "seek", "volume"]
+    value: float | None = Field(None, ge=0, le=86400)
+
+
+def _own_session_label(user: dict, request: Request) -> tuple[str, str, str]:
+    """(name the user gave this device, browser, system) of the login a request comes from."""
+    mine = next((s for s in db.list_sessions(user["id"], request.cookies.get(SESSION_COOKIE, "")) if s["current"]), None)
+    if not mine:
+        return "", "", ""
+    browser, system = devices.describe(mine["ua"])
+    return mine["name"], browser, system
+
+
+async def _player_events(q, session: int):
+    """The event stream of one player: commands from other devices, a ping now and then (which also notices a login that was ended)."""
+    yield ": connected\n\n"
+    while True:
+        try:
+            msg = await asyncio.wait_for(q.get(), timeout=20)
+        except asyncio.TimeoutError:
+            if not await asyncio.to_thread(db.session_exists, session):
+                return
+            yield ": ping\n\n"
+            continue
+        if msg is None:
+            return
+        yield f"event: {msg['event']}\ndata: {json.dumps(msg['data'])}\n\n"
+
+
+@api.get("/player/events")
+async def player_events(request: Request, player: str = Query(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"), user: dict = Depends(current_user)):
+    """Server-sent events for a player that can be controlled: it receives the commands other devices of the account send."""
+    name, browser, system = await asyncio.to_thread(_own_session_label, user, request)
+    p = playerhub.connect(user["id"], player, user["sid"], name, browser, system)
+    if p is None:
+        raise HTTPException(429, tr("Too many players of this account are connected."))
+
+    async def stream():
+        try:
+            async for chunk in _player_events(p.queue, user["sid"]):
+                yield chunk
+        finally:
+            playerhub.disconnect(user["id"], player, p)
+
+    return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@api.post("/player/state")
+def player_state(body: PlayerStateIn, user: dict = Depends(current_user)):
+    """A connected player says what it plays (when something changes, and every few seconds while it plays)."""
+    t = body.track
+    state = {"playing": body.playing, "position": body.position, "duration": body.duration, "volume": body.volume,
+             "track": {"id": t.id, "title": t.title, "artist": t.artist, "thumb": t.thumb} if t else None}
+    return {"ok": playerhub.set_state(user["id"], body.player, state)}
+
+
+@api.get("/player/devices")
+def player_devices(player: str = Query("", max_length=64), user: dict = Depends(current_user)):
+    """The other players of this account that can be controlled (player = the asking one, left out)."""
+    return {"devices": playerhub.devices(user["id"], player)}
+
+
+@api.post("/player/command")
+def player_command(body: PlayerCommandIn, user: dict = Depends(current_user)):
+    """Sends a command to another player of the same account (play, pause, next, previous, seek to a second, volume 0 to 1)."""
+    if body.cmd in ("seek", "volume") and body.value is None:
+        raise HTTPException(422, tr("This command needs a value."))
+    if body.cmd == "volume" and body.value > 1:
+        raise HTTPException(422, tr("Volume is a number from 0 to 1."))
+    session = playerhub.session_of(user["id"], body.target)
+    if session is None or not db.session_exists(session):
+        raise HTTPException(404, tr("That device is not available any more."))
+    if playerhub.send(user["id"], body.target, {"cmd": body.cmd, "value": body.value}) != "ok":
+        raise HTTPException(409, tr("That device does not respond."))
     return {"ok": True}
 
 

@@ -168,6 +168,11 @@ play, shuffle or start a radio.
 
 ### The player
 
+**Steering another device:** if music plays on one of your devices (say your computer) you can steer it from another (your phone): tap the **Devices** button (the little screen and phone
+icon at the top, in the player bar and in the big player). It lists your other devices that have a song loaded, with play/pause, previous, next, a position slider and the volume.
+A green dot on the button tells you that another device is playing. Tapping a song on the device in your hand plays it there and leaves the other one alone.
+A phone that was put to sleep may not receive commands before you wake it, and some browsers refuse to start playback without a tap on that device (pause and skip always work).
+
 The bar at the bottom shows what plays. Tap it to open the full-screen player:
 
 - play, pause, previous, next, seek, volume (on a computer)
