@@ -58,6 +58,7 @@ secure by default, and the core stays free of any third-party service.
 | `loginalerts.py` | Login alerts: remembers each login (`login_history`) and, if its device or network is new for the user and the first one is long past, leaves a bell message. |
 | `playerhub.py` | Remote control: every visible page and every player with a queue keeps a server-sent-events stream (`GET /api/player/events`); players with a queue publish their state (`POST /api/player/state`). The stream pushes the list of the other devices when it changes (`devices` event: who plays what; the header dot follows it) and delivers commands (`POST /api/player/command`). `GET /api/player/devices` gives the same list on demand. In memory, one server process. |
 | `devices.py` | Browser and system from a User-Agent, for the list of a user's devices (logins). |
+| `homewidgets.py` | The home page: catalog of widgets with their options, the default layout, checking a saved layout, building each widget's data. Add a widget: a spec in `specs()`, a builder in `_BUILDERS`, a view in `widgetHtml()` (`app.js`). |
 | `bpm.py` | Tempo, beat grid, key and intro/outro analysis for DJ mode (ffmpeg + numpy). |
 | `enrich.py` | Year, cover and artist description from MusicBrainz and the Cover Art Archive. |
 | `plugins.py` | The core's view of plugins: registry, calls to a plugin's HTTP API, ID prefixing, caching. |
@@ -181,6 +182,7 @@ SQLite file at `DB_PATH`, WAL mode, foreign keys on (deleting a user cascades).
 | `follows` | community: who follows whom |
 | `notifications` | bell messages: `target` 0 = system (admins), else a user id; unique per `(target, key)` |
 | `login_blocks` | running blocks of the login protection: `key` (`<ip>|<name>` or `<ip>|*`) and `until`; not part of backups |
+| `home_layouts` | a user's own widget layout as JSON (none = the default) |
 | `settings` | key/value settings (admin choices, community switch, cached update answer, …) |
 | `stream_stats` | how long songs took to start (health card) |
 | `lyrics`, `bpm` | caches |

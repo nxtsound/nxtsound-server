@@ -6,11 +6,14 @@ minor versions may contain breaking changes, which are called out.
 ## [Unreleased]
 
 ### Added
+### Added
 - **Remote control:** the new *Devices* button (in the header, the player bar and the big player) lists the other devices of your account that have something loaded and steers them: play and pause, next and previous, jump to a position, volume. A green dot on the header button pulses while another device is playing and appears or disappears by itself as soon as a stream starts or ends (no reload). Playing something on the device in your hand does not stop the other one.
 - **Login alerts:** when an account is logged in from a device (browser and system) or a network (address group) the user has not used before, they get a message in their bell that links to *Account → Devices*. The very first login of a user raises nothing. Admin area → System → Login alerts turns it off (`LOGIN_ALERTS`).
 - **Devices:** Account → Devices lists every browser and app you are logged in on (name, browser and system, when you logged in, when it was last used, IP address). Give a device a name, log a single device out, or log out everywhere else.
 - **Limit for playing at the same time:** Admin area → System → Playing at the same time sets how many streams of one account may play at once (`MAX_STREAMS_PER_USER`, default 0 = no limit). Every player counts, a browser tab as well as an app, even several in the same login. A further player is told so when it tries to start and does not play; the ones that already play are not disturbed. Pausing or closing the tab frees the place. The admin also sees who plays right now.
 - **Login protection you can set:** Admin area → System → Login protection sets how many failed logins an address may make and how long it is blocked afterwards (defaults 5 and 5 minutes, `LOGIN_MAX_ATTEMPTS` and `LOGIN_BLOCK_MINUTES`). Blocks survive a restart and can be lifted there. `0` attempts turns the protection off.
+- **A home page you can arrange:** *Customize home* (at the bottom of the home page) lets every user choose which sections appear, their order and their options (rows, number of songs, period). Besides the existing sections there are new ones: *Rediscover*, *Your top songs* (week, month, year, all time), *Genres*, *Decades*, *Artist mixes*, *Discover*, *Your playlists*, *Shuffle your liked songs*, *Recap in numbers*, *A year ago* and *Your mix for this time of day*. Sections with nothing to show stay hidden; *Back to the default* restores the original page.
+
 
 ### Changed
 - **Calmer home page:** "Recently played" is smaller (2 x 2 per page, three pages at most), "Recently added" comes right after it instead of at the bottom, "Your Mix" spans the full width and keeps its red divider, and each "Because you listened to ..." shelf starts with the cover of its song.

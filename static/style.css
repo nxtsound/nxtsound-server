@@ -735,3 +735,28 @@ select option{background:#1c1c1e;color:#fff}
 .sect-flat.sect-because{margin-top:20px;padding-top:18px;border-top:1px solid rgba(255,255,255,.08)}
 .sect-because ~ .sect-because{margin-top:14px}
 @media (min-width:900px){.sect-hero{margin-left:0;margin-right:0;border-radius:18px;border:1px solid rgba(255,60,80,.2)}}
+
+/* Home widgets and customizing */
+.phead.hasnav{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.phead.hasnav .ptext{flex:1;min-width:0}
+.phead.hasnav.withcover{align-items:center}
+.seeall{background:none;border:0;color:var(--dim);font-size:13px;font-weight:600;padding:4px 0;cursor:pointer;flex:none}
+.seeall:hover{color:var(--txt)}
+.sect-action .phead{padding-bottom:6px}
+.homeedit{margin:26px 16px 8px;justify-content:center}
+.hwlist{display:flex;flex-direction:column;gap:8px}
+.hw{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.04);border-radius:14px;padding:12px 14px}
+.hw-main{flex:1;min-width:0}
+.hw-title{font-weight:600}
+.hw-main .small{margin:2px 0 0}
+.hw-opts{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+.hw-o{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--dim)}
+.hw-o input{background:var(--card);border:0;color:var(--txt);padding:8px 12px;border-radius:18px;font-size:14px;width:90px;outline:none}
+.hw-o select{max-width:180px}
+.hw-act{flex:none;display:flex;align-items:center;gap:4px}
+.hw-act .ibtn.up .ic{transform:rotate(180deg)}
+.hw-act .ibtn:disabled{opacity:.25}
+.hw-act .btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;font-size:13px}
+.hw-act .btn .ic{width:16px;height:16px}
+@media (max-width:560px){.hw{flex-wrap:wrap}.hw-act{width:100%;justify-content:flex-end}}
+.hw-o select{background:var(--card);color:var(--txt);border:0;border-radius:18px;padding:8px 12px;font-size:14px;outline:none}
