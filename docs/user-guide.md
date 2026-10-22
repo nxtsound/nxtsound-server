@@ -212,6 +212,10 @@ from which IP address. You can give a device your own name, log a single device 
 when you lose a phone or used a computer that is not yours. The server keeps the address of a login only for this list, until the login ends.
 Changing your password logs out every device.
 
+**Login alerts:** if your account is logged in from a device or network you have not used before, a message appears in the bell (top right) saying which device and from which
+address. If it was not you, open *Account → Devices*, log that device out and change your password. A "network" is the address group of your internet connection, not a place on the map;
+the server never asks anyone where an address is. The admin can switch the alerts off.
+
 ## Admin area
 
 Only admins see it. It has four tabs.
@@ -352,7 +356,7 @@ Reaching the server's port directly always works for a test.
 | lrclib.net | song lyrics (only the song title, artist, album and length are sent) | `LYRICS=0` |
 | Plugins you install | whatever the plugin does (for example the radio plugin asks radio-browser.info) | do not install them |
 
-- Passwords are stored as salted hashes; sessions expire; the database only holds a hash of your session cookie. For each login it also keeps the browser name and the IP address (at login and at last use) so you can see your devices; they are deleted when the login ends and are not part of backups.
+- Passwords are stored as salted hashes; sessions expire; the database only holds a hash of your session cookie. For each login it also keeps the browser name and the IP address (at login and at last use) so you can see your devices; they are deleted when the login ends and are not part of backups. A short history of your recent logins (time, address, browser and system) stays for the login alerts.
 - Logs never contain passwords, and failed logins are not logged with names.
 - Community sharing is opt-in per person.
 

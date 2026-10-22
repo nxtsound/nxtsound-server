@@ -38,6 +38,7 @@ import devices
 import enrich
 import i18n
 import logconf
+import loginalerts
 import pluginhost
 import plugins
 import library
@@ -300,7 +301,9 @@ def _record_fail(request: Request, name: str) -> None:
 
 
 def _start_session(request: Request, response: Response, user: dict) -> str:
-    token, csrf = db.create_session(user["id"], devices.short_agent(request.headers.get("user-agent", "")), _client_ip(request))
+    ua, ip = devices.short_agent(request.headers.get("user-agent", "")), _client_ip(request)
+    token, csrf = db.create_session(user["id"], ua, ip)
+    loginalerts.on_login(user["id"], ip, ua)
     _set_session_cookie(request, response, token)
     return csrf
 
@@ -458,6 +461,16 @@ def _render_notification(n: dict) -> dict:
     elif kind == "follow":
         title = tr("{name} follows you", name=d.get("name", ""))
         nav = "#/community"
+    elif kind == "new_login":
+        title = tr("New login to your account")
+        device = tr("{browser} on {system}", browser=d["browser"], system=d["system"]) if d.get("browser") and d.get("system") else d.get("browser") or d.get("system") or tr("Unknown device")
+        if d.get("new_device") and d.get("new_network"):
+            body = tr("{device} ({ip}): a device and a network you have not used before.", device=device, ip=d.get("ip", ""))
+        elif d.get("new_device"):
+            body = tr("{device} ({ip}): a device you have not used before.", device=device, ip=d.get("ip", ""))
+        else:
+            body = tr("{device} ({ip}): a network you have not used before.", device=device, ip=d.get("ip", ""))
+        nav = "#/account/devices"
     return {"id": n["id"], "kind": kind, "system": n["system"], "title": title, "body": body, "nav": nav, "created_at": n["created_at"], "unread": n["unread"]}
 
 
@@ -557,6 +570,23 @@ class CommunityIn(BaseModel):
 @admin.get("/community")
 def admin_community():
     return {"enabled": db.community_enabled(), "users": db.count_users(), "sharing": sum(1 for p in db.people(0) if p["shares"])}
+
+
+class LoginAlertsIn(BaseModel):
+    enabled: bool
+
+
+@admin.get("/login-alerts")
+def admin_login_alerts():
+    """Whether users are warned about logins from a new device or network."""
+    return {"enabled": loginalerts.enabled(), "default": loginalerts.DEFAULT_ON}
+
+
+@admin.put("/login-alerts")
+def admin_login_alerts_set(body: LoginAlertsIn):
+    loginalerts.set_enabled(body.enabled)
+    log.info("Login alerts turned %s", "on" if body.enabled else "off")
+    return {"enabled": body.enabled, "default": loginalerts.DEFAULT_ON}
 
 
 @admin.put("/community")

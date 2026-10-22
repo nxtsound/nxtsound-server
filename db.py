@@ -92,6 +92,16 @@ CREATE TABLE IF NOT EXISTS sessions(
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS login_history(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  at INTEGER NOT NULL,
+  ip TEXT NOT NULL,
+  net TEXT NOT NULL,
+  browser TEXT NOT NULL DEFAULT '',
+  system TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_login_history_user ON login_history(user_id, id);
 CREATE TABLE IF NOT EXISTS playlists(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -579,6 +589,23 @@ def backup_to(target: Path) -> None:
             dst.close()
     finally:
         src.close()
+
+
+LOGIN_HISTORY_KEEP = 200  # logins remembered per user (what counts as "usual")
+
+
+def record_login(user_id: int, ip: str, net: str, browser: str, system: str) -> dict:
+    """Remembers a login and says whether its device (browser and system) or network was never seen before for this user.
+    The very first remembered login has nothing to compare with ("first")."""
+    with db() as c:
+        n = c.execute("SELECT COUNT(*) FROM login_history WHERE user_id = ?", (user_id,)).fetchone()[0]
+        new_net = n > 0 and c.execute("SELECT 1 FROM login_history WHERE user_id = ? AND net = ? LIMIT 1", (user_id, net)).fetchone() is None
+        new_dev = n > 0 and bool(browser or system) and c.execute(
+            "SELECT 1 FROM login_history WHERE user_id = ? AND browser = ? AND system = ? LIMIT 1", (user_id, browser, system)).fetchone() is None
+        cur = c.execute("INSERT INTO login_history(user_id, at, ip, net, browser, system) VALUES(?, ?, ?, ?, ?, ?)", (user_id, _now(), ip, net, browser, system))
+        c.execute("DELETE FROM login_history WHERE user_id = ? AND id NOT IN (SELECT id FROM login_history WHERE user_id = ? ORDER BY id DESC LIMIT ?)",
+                  (user_id, user_id, LOGIN_HISTORY_KEEP))
+    return {"id": cur.lastrowid, "first": n == 0, "new_device": new_dev, "new_network": new_net}
 
 
 def delete_session(token: str) -> None:
