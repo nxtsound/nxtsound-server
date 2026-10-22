@@ -1292,8 +1292,156 @@ function updatesCard(up) {
     ${s.error ? ' · ' + esc(tr('Last attempt failed: {why}', { why: s.error })) : ''}</p></section>`;
 }
 
+// Backups to other places: the destinations, their status, and the sheets to set one up or restore from it.
+function backupsCard(bk) {
+  const sched = { off: tr('Off'), '6h': tr('Every 6 hours'), '12h': tr('Every 12 hours'), daily: tr('Daily'), weekly: tr('Weekly (Sundays)') };
+  const row = (t) => {
+    const s = t.state;
+    const when = t.schedule === 'daily' || t.schedule === 'weekly' ? `${sched[t.schedule]} · ${t.at}` : sched[t.schedule] || t.schedule;
+    const status = s.running ? `<span class="bk-run">${esc(tr('Backing up …'))}</span>`
+      : s.last_error && s.last_run > s.last_ok ? `<span class="err">${esc(tr('Last attempt failed: {error}', { error: s.last_error }))}</span>`
+        : s.last_ok ? esc(tr('Last backup {when} ({size})', { when: ago(s.last_ok), size: fmtBytes(s.last_size) })) : esc(tr('No backup yet'));
+    return `<div class="bkrow"><div class="bk-main"><div class="bk-name">${esc(t.name)} <span class="dim small">${esc(bk.types[t.type] ? bk.types[t.type].label : t.type)}</span></div>
+      <div class="dim small">${esc(when)} · ${esc(tr('keeps the last {n}', { n: t.keep }))}</div><div class="small" style="margin:2px 0 0">${status}</div></div>
+      <div class="bk-act"><button class="btn sec" data-act="bkRun" data-id="${esc(t.id)}"${s.running ? ' disabled' : ''}>${esc(tr('Back up now'))}</button>
+      <button class="btn sec" data-act="bkFiles" data-id="${esc(t.id)}">${esc(tr('Backups'))}</button><button class="btn sec" data-act="bkEdit" data-id="${esc(t.id)}">${esc(tr('Edit'))}</button></div></div>`;
+  };
+  return `<section class="acard"><h3>${esc(tr('Backups to other places'))}</h3>
+    <p class="dim small" style="margin:0 0 10px">${esc(tr('Copies of the database (users, playlists, history, settings) go to a folder, S3, Nextcloud or ownCloud, FTP or SFTP, by hand or on a schedule. The music files are not part of it.'))}</p>
+    ${bk.targets.map(row).join('') || `<div class="sub" style="margin:0 0 8px">${esc(tr('No destination yet.'))}</div>`}
+    <div class="actions" style="margin:10px 0 0"><button class="btn sec" data-act="bkAdd"${bk.targets.length >= bk.max_targets ? ' disabled' : ''}>+ ${esc(tr('Add a destination'))}</button></div>
+    <p class="dim small" style="margin:10px 0 0">${esc(tr('A backup contains password hashes and the settings of your plugins and destinations. Keep it where only you can read it.'))}</p></section>`;
+}
+
+const BK = { data: null, poll: 0 };
+const bkTarget = (id) => (BK.data.targets.find((t) => t.id === id) || null);
+
+function bkFieldHtml(f, t) {
+  const v = t && t.cfg[f.key] !== undefined ? t.cfg[f.key] : (f.default !== undefined ? f.default : '');
+  const set = !!(t && t.secrets_set.includes(f.key));
+  const keep = set ? ` placeholder="${esc(tr('(unchanged)'))}"` : '';
+  let input;
+  if (f.type === 'choice') input = `<select name="${esc(f.key)}">${f.choices.map((c) => `<option value="${esc(c.value)}"${c.value === v ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}</select>`;
+  else if (f.type === 'textarea') input = `<textarea name="${esc(f.key)}" rows="4" spellcheck="false"${keep}></textarea>`;
+  else if (f.type === 'password') input = `<input type="password" name="${esc(f.key)}" autocomplete="new-password"${keep}>`;
+  else if (f.type === 'int') input = `<input type="number" name="${esc(f.key)}" min="${f.min}" max="${f.max}" value="${esc(v)}">`;
+  else input = `<input type="text" name="${esc(f.key)}" value="${esc(v)}" placeholder="${esc(f.placeholder || '')}" autocomplete="off" spellcheck="false">`;
+  return `<label class="bk-f"><span>${esc(f.label)}${f.required ? ' *' : ''}</span>${input}${f.help ? `<small class="dim">${esc(f.help)}</small>` : ''}</label>`;
+}
+
+function bkCollect(form, kind) {
+  const cfg = {};
+  BK.data.types[kind].fields.forEach((f) => {
+    const el = form.elements[f.key];
+    cfg[f.key] = f.type === 'int' ? Number(el.value) : el.value;
+  });
+  return { name: form.elements.name.value, type: kind, cfg, schedule: form.elements.schedule.value, at: form.elements.at.value || '03:00', keep: Number(form.elements.keep.value) };
+}
+
+function bkSheet(t, kind) {
+  kind = kind || (t ? t.type : 'local');
+  const types = BK.data.types;
+  const sched = { off: tr('Off'), '6h': tr('Every 6 hours'), '12h': tr('Every 12 hours'), daily: tr('Daily'), weekly: tr('Weekly (Sundays)') };
+  openSheet(`<div class="sh-title">${esc(t ? t.name : tr('Add a destination'))}</div>
+    <form id="bkForm" class="bkform" autocomplete="off" data-id="${t ? esc(t.id) : ''}" data-kind="${esc(kind)}">
+      <label class="bk-f"><span>${esc(tr('Name'))} *</span><input type="text" name="name" value="${esc(t ? t.name : '')}" maxlength="40" placeholder="${esc(tr('for example Home NAS'))}"></label>
+      <label class="bk-f"><span>${esc(tr('Where to'))}</span><select name="kind"${t ? ' disabled' : ''}>${Object.entries(types).map(([k, v]) => `<option value="${esc(k)}"${k === kind ? ' selected' : ''}>${esc(v.label)}</option>`).join('')}</select></label>
+      ${types[kind].fields.map((f) => bkFieldHtml(f, t && t.type === kind ? t : null)).join('')}
+      <label class="bk-f"><span>${esc(tr('When'))}</span><select name="schedule">${BK.data.schedules.map((k) => `<option value="${esc(k)}"${t && t.schedule === k ? ' selected' : ''}>${esc(sched[k])}</option>`).join('')}</select></label>
+      <label class="bk-f" id="bkAt"><span>${esc(tr('At (server time)'))}</span><input type="time" name="at" value="${esc(t ? t.at : '03:00')}"></label>
+      <label class="bk-f"><span>${esc(tr('Keep the last'))}</span><input type="number" name="keep" min="1" max="365" value="${t ? t.keep : 7}"></label>
+      <div class="err" id="bkErr"></div><div class="small" id="bkMsg"></div>
+      <div class="actions"><button class="btn" type="submit">${esc(tr('Save'))}</button><button class="btn sec" type="button" data-bk="test">${esc(tr('Test the connection'))}</button>
+      ${t ? `<button class="btn sec danger" type="button" data-bk="remove">${esc(tr('Remove'))}</button>` : ''}<button class="btn sec" type="button" data-close>${esc(tr('Cancel'))}</button></div>
+    </form>`);
+  const f = $('#bkForm');
+  const atShow = () => { $('#bkAt').hidden = !['daily', 'weekly'].includes(f.elements.schedule.value); };
+  f.elements.schedule.addEventListener('change', atShow);
+  atShow();
+}
+
+function bkFilesSheet(id, files) {
+  const t = bkTarget(id);
+  openSheet(`<div class="sh-title">${esc(t ? t.name : '')}</div>
+    ${files.length ? `<div class="bkfiles">${files.map((f) => `<div class="bkfile" data-name="${esc(f.name)}"><div class="bk-main"><div class="bk-name">${esc(f.name)}</div>
+      <div class="dim small">${esc(fmtBytes(f.size))}${f.modified ? ' · ' + esc(ago(f.modified)) : ''}</div></div>
+      <div class="bk-act"><button class="btn sec" data-bk="restore">${esc(tr('Restore'))}</button><button class="btn sec" data-bk="deleteFile">${esc(tr('Delete'))}</button></div></div>`).join('')}</div>`
+    : `<div class="empty" style="padding:18px 8px">${esc(tr('Nothing has been backed up here yet.'))}</div>`}
+    <div class="actions"><button class="btn" data-close>${esc(tr('Close'))}</button></div>`);
+  $('#sheet .panel').dataset.bkTarget = id;
+}
+
+async function bkLoad() { BK.data = await api('/admin/backups'); }
+
+// While a backup runs the page asks every 2 seconds, until it is done.
+function bkWatch() {
+  clearInterval(BK.poll);
+  BK.poll = setInterval(async () => {
+    if (!location.hash.startsWith('#/admin/system')) { clearInterval(BK.poll); return; }
+    try { await bkLoad(); } catch (_) { return; }
+    if (!BK.data.targets.some((t) => t.state.running)) { clearInterval(BK.poll); route(); }
+  }, 2000);
+}
+
+Object.assign(actions, {
+  bkAdd: async () => { await bkLoad(); bkSheet(null); },
+  bkEdit: async (n) => { await bkLoad(); bkSheet(bkTarget(n.dataset.id)); },
+  bkRun: async (n) => {
+    try { await api('/admin/backups/targets/' + n.dataset.id + '/run', { method: 'POST' }); await bkLoad(); route(); bkWatch(); } catch (e) { toast(e.message, 4000, true); }
+  },
+  bkFiles: async (n) => {
+    try { await bkLoad(); const { files } = await api('/admin/backups/targets/' + n.dataset.id + '/files', {}, 90000); bkFilesSheet(n.dataset.id, files); } catch (e) { toast(e.message, 5000, true); }
+  },
+});
+
+$('#sheet .panel').addEventListener('change', (e) => {
+  const f = e.target.form;
+  if (f && f.id === 'bkForm' && e.target.name === 'kind') {  // another kind of destination: other fields, the name stays
+    const t = bkTarget(f.dataset.id);
+    const name = f.elements.name.value, schedule = f.elements.schedule.value, keep = f.elements.keep.value, at = f.elements.at.value;
+    bkSheet(t && t.type === e.target.value ? t : null, e.target.value);
+    const g = $('#bkForm');
+    g.elements.name.value = name; g.elements.schedule.value = schedule; g.elements.keep.value = keep; g.elements.at.value = at; g.elements.schedule.dispatchEvent(new Event('change'));
+  }
+});
+$('#sheet .panel').addEventListener('submit', async (e) => {
+  const f = e.target;
+  if (f.id !== 'bkForm') return;
+  e.preventDefault();
+  $('#bkErr').textContent = ''; $('#bkMsg').textContent = '';
+  try {
+    await api('/admin/backups/targets', { method: 'PUT', json: { id: f.dataset.id || null, ...bkCollect(f, f.dataset.kind) } });
+    closeSheet(); toast(tr('Saved')); route();
+  } catch (er) { $('#bkErr').textContent = er.message; }
+});
+$('#sheet .panel').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-bk]');
+  if (!b) return;
+  const f = $('#bkForm');
+  if (b.dataset.bk === 'test' && f) {
+    $('#bkErr').textContent = ''; $('#bkMsg').textContent = tr('Trying …'); b.disabled = true;
+    try { const r = await api('/admin/backups/test', { json: { id: f.dataset.id || null, ...bkCollect(f, f.dataset.kind) } }, 90000); $('#bkMsg').textContent = r.message; } catch (er) { $('#bkMsg').textContent = ''; $('#bkErr').textContent = er.message; }
+    b.disabled = false;
+  } else if (b.dataset.bk === 'remove' && f) {
+    if (!(await uiConfirm(tr('Remove this destination? Backups that are already there stay where they are.'), true))) return;
+    try { await api('/admin/backups/targets/' + f.dataset.id, { method: 'DELETE' }); closeSheet(); route(); } catch (er) { toast(er.message, 4000, true); }
+  } else if (b.dataset.bk === 'restore' || b.dataset.bk === 'deleteFile') {
+    const id = $('#sheet .panel').dataset.bkTarget, name = b.closest('.bkfile').dataset.name;
+    if (b.dataset.bk === 'restore') {
+      if (!(await uiConfirm(tr('Restore “{name}”?\n\nThis replaces all users, playlists, history and settings with the state of this backup. A copy of the current state is kept in the data folder. Everybody has to log in again.', { name }), true))) return;
+      b.disabled = true;
+      try { await api('/admin/backups/targets/' + id + '/restore', { json: { name } }, 600000); toast(tr('Backup restored. Please log in again.'), 4000); showLogin(); } catch (er) { toast(er.message, 6000, true); b.disabled = false; }
+    } else {
+      if (!(await uiConfirm(tr('Delete “{name}” from this destination?', { name }), true))) return;
+      try { const r = await api('/admin/backups/targets/' + id + '/delete-file', { json: { name } }); bkFilesSheet(id, r.files); } catch (er) { toast(er.message, 5000, true); }
+    }
+  }
+});
+
 async function adminSystem() {
   const [lib, en, lg, up, com, la, str, sec] = await Promise.all([api('/admin/library'), api('/admin/enrich'), api('/admin/logging'), api('/admin/updates').catch(() => null), api('/admin/community'), api('/admin/login-alerts'), api('/admin/streams'), api('/admin/security')]);
+  BK.data = await api('/admin/backups');
+  if (BK.data.targets.some((t) => t.state.running)) bkWatch();
   const sc = lib.scan;
   const enState = !en.enabled ? tr('Off') : en.running ? tr('Looking up …')
     : en.finished ? tr('Last run {when}', { when: ago(en.finished) }) + (en.error ? ' (' + tr('aborted: {why}', { why: en.error }) + ')' : '') : tr('Waiting for the next scan');
@@ -1324,6 +1472,7 @@ async function adminSystem() {
     <div class="actions" style="margin:12px 0 0"><button class="btn sec" data-act="logShow">${esc(tr('Show recent messages'))}</button></div>
     <pre id="logView" class="dim small" style="white-space:pre-wrap;margin:10px 0 0;max-height:18em;overflow:auto" hidden></pre>
     <p class="dim small" style="margin:10px 0 0">${esc(tr('Choose what the server logs. Changes apply at once; the environment variables LOG_LEVEL and LOG_LEVEL_<CATEGORY> set the defaults.'))}</p></section>
+    ${backupsCard(BK.data)}
     <section class="acard"><h3>${esc(tr('Backup'))}</h3>
     <div class="actions" style="margin:0"><a class="btn sec" href="/api/admin/backup" download>${esc(tr('Download database backup'))}</a><button class="btn sec" data-act="restorePick">${esc(tr('Restore backup …'))}</button><input type="file" id="restoreFile" accept=".db,application/octet-stream" hidden></div>
     <p class="dim small" style="margin:10px 0 0">${esc(tr('The backup contains users (with password hashes), playlists and history, but no sessions. Keep it safe. The music files are not included. Restoring replaces everything with the state of the backup (the server first saves a copy of the current state in the data folder); everyone has to log in again afterwards.'))}</p></section>`;
