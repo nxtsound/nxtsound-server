@@ -259,6 +259,12 @@ def init_db() -> None:
         if "last_seen" not in scols:
             c.execute("ALTER TABLE sessions ADD COLUMN last_seen INTEGER NOT NULL DEFAULT 0")
             c.execute("UPDATE sessions SET last_seen = created_at")
+        for name, ddl in (("device", "TEXT NOT NULL DEFAULT ''"), ("ua", "TEXT NOT NULL DEFAULT ''"), ("ip", "TEXT NOT NULL DEFAULT ''"),
+                          ("last_ip", "TEXT NOT NULL DEFAULT ''"), ("active_at", "INTEGER NOT NULL DEFAULT 0")):
+            if name not in scols:
+                c.execute(f"ALTER TABLE sessions ADD COLUMN {name} {ddl}")  # device list: name chosen by the user, browser, IP at login and at last use
+                if name == "active_at":
+                    c.execute("UPDATE sessions SET active_at = last_seen")
         # there is always an admin: for old databases the oldest user
         if c.execute("SELECT COUNT(*) FROM users").fetchone()[0] and not c.execute("SELECT 1 FROM users WHERE is_admin = 1").fetchone():
             c.execute("UPDATE users SET is_admin = 1 WHERE id = (SELECT MIN(id) FROM users)")
@@ -471,11 +477,12 @@ def _sid(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def create_session(user_id: int) -> tuple[str, str]:
-    """Returns (cookie token, CSRF token)."""
+def create_session(user_id: int, ua: str = "", ip: str = "") -> tuple[str, str]:
+    """Returns (cookie token, CSRF token). ua and ip are what the device list shows for this login."""
     token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(24)
     with db() as c:
-        c.execute("INSERT INTO sessions(token, user_id, created_at, last_seen, csrf) VALUES(?, ?, ?, ?, ?)", (_sid(token), user_id, _now(), _now(), csrf))
+        c.execute("INSERT INTO sessions(token, user_id, created_at, last_seen, csrf, ua, ip, last_ip, active_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                  (_sid(token), user_id, _now(), _now(), csrf, ua, ip, ip, _now()))
         c.execute("UPDATE users SET last_active = ? WHERE id = ?", (_now(), user_id))
     return token, csrf
 
@@ -484,14 +491,14 @@ SESSION_TOUCH = 3600  # last_seen hoechstens stuendlich schreiben
 ACTIVE_TOUCH = 60     # "last active" accurate to a minute
 
 
-def user_for_token(token: str, ttl: int | None = None, max_age: int | None = None) -> dict | None:
+def user_for_token(token: str, ttl: int | None = None, max_age: int | None = None, ip: str = "") -> dict | None:
     """User for the session. With ttl (seconds) the session expires after ttl of inactivity (sliding):
     every use extends it. With max_age it ends that long after the login whatever happens (a stolen cookie cannot be kept alive for ever).
-    user["_renew"] is True if the cookie should be set again."""
+    user["_renew"] is True if the cookie should be set again. ip is where the request came from (shown in the device list)."""
     now = _now()
     with db() as c:
         row = c.execute(
-            "SELECT u.id, u.name, u.is_admin, u.onboarded, u.pw_hash, u.created_at, u.pw_temp, u.last_active, u.lang, s.last_seen, s.csrf, s.created_at AS started "
+            "SELECT u.id, u.name, u.is_admin, u.onboarded, u.pw_hash, u.created_at, u.pw_temp, u.last_active, u.lang, s.last_seen, s.csrf, s.created_at AS started, s.active_at, s.last_ip "
             "FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?",
             (_sid(token),),
         ).fetchone()
@@ -503,6 +510,8 @@ def user_for_token(token: str, ttl: int | None = None, max_age: int | None = Non
         renew = now - row["last_seen"] > SESSION_TOUCH
         if renew:
             c.execute("UPDATE sessions SET last_seen = ? WHERE token = ?", (now, _sid(token)))
+        if now - row["active_at"] > ACTIVE_TOUCH or (ip and ip != row["last_ip"]):
+            c.execute("UPDATE sessions SET active_at = ?, last_ip = ? WHERE token = ?", (now, ip or row["last_ip"], _sid(token)))
         if now - row["last_active"] > ACTIVE_TOUCH:
             c.execute("UPDATE users SET last_active = ? WHERE id = ?", (now, row["id"]))
     return {**_user(row), "_renew": renew, "csrf": row["csrf"]}
@@ -575,6 +584,43 @@ def backup_to(target: Path) -> None:
 def delete_session(token: str) -> None:
     with db() as c:
         c.execute("DELETE FROM sessions WHERE token = ?", (_sid(token),))
+
+
+SESSION_NAME_MAX = 40
+
+
+def list_sessions(user_id: int, current_token: str) -> list[dict]:
+    """The user's logins, the current one first, then the most recently used. "id" is only valid together with the user's ID."""
+    mine = _sid(current_token) if current_token else ""
+    with db() as c:
+        rows = c.execute("SELECT rowid AS id, token, device, ua, ip, last_ip, created_at, active_at, last_seen FROM sessions WHERE user_id = ?", (user_id,)).fetchall()
+    out = [{"id": r["id"], "name": r["device"], "ua": r["ua"], "ip": r["ip"], "last_ip": r["last_ip"], "created_at": r["created_at"],
+            "last_active": r["active_at"] or r["last_seen"], "current": r["token"] == mine} for r in rows]
+    return sorted(out, key=lambda x: (not x["current"], -x["last_active"]))
+
+
+def rename_session(user_id: int, session_id: int, name: str) -> bool:
+    """Sets the name the user gave the device (empty = back to the automatic name). False if the session is not theirs."""
+    with db() as c:
+        return c.execute("UPDATE sessions SET device = ? WHERE rowid = ? AND user_id = ?", (name.strip()[:SESSION_NAME_MAX], session_id, user_id)).rowcount > 0
+
+
+def end_session(user_id: int, session_id: int, keep_token: str = "") -> str:
+    """Logs one device out. Returns "ok", "missing" (not the user's) or "current" (the device asking: that is a log out)."""
+    with db() as c:
+        row = c.execute("SELECT token FROM sessions WHERE rowid = ? AND user_id = ?", (session_id, user_id)).fetchone()
+        if row is None:
+            return "missing"
+        if keep_token and row["token"] == _sid(keep_token):
+            return "current"
+        c.execute("DELETE FROM sessions WHERE rowid = ?", (session_id,))
+    return "ok"
+
+
+def end_other_sessions(user_id: int, keep_token: str) -> int:
+    """Logs every device out except the one asking. Returns how many were ended."""
+    with db() as c:
+        return c.execute("DELETE FROM sessions WHERE user_id = ? AND token != ?", (user_id, _sid(keep_token))).rowcount
 
 
 # ---------- Playlists ----------
