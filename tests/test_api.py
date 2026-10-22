@@ -140,3 +140,15 @@ def test_invalid_ids_rejected(client):
     assert client.get("/api/stream/zu-kurz").status_code == 400
     assert client.get("/api/radio/zu-kurz").status_code == 400
     assert client.get("/api/artist/a b").status_code in (400, 404)
+
+
+def test_home_shelf_order_and_covers_for_because_shelves(alice, lib):
+    """Recently played, what is new, the mix, then the "because" shelves (each led by the cover of its song)."""
+    ids = ids_by_title(alice)
+    for title in ("Alpha", "Beta", "Gamma"):
+        _played(alice, ids, title)
+    shelves = alice.get("/api/home").json()["shelves"]
+    rank = {"recent": 0, "new": 1, "mix": 2, "because": 3}
+    kinds = [s["kind"] for s in shelves]
+    assert kinds[0] == "recent" and kinds == sorted(kinds, key=rank.get)
+    assert all("thumb" in s for s in shelves if s["kind"] == "because")
