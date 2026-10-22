@@ -206,6 +206,22 @@ body{background:transparent;position:relative}
 .kbd-keys{display:flex;align-items:center;gap:6px;flex:none}
 kbd{display:inline-block;min-width:24px;padding:2px 8px;text-align:center;font:600 12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--txt);background:var(--card2);border:1px solid rgba(255,255,255,.16);border-bottom-width:2px;border-radius:6px}
 .kbd-keys .then{font-size:11px;color:var(--dim)}
+/* Backups to other places */
+.bkrow{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid rgba(255,255,255,.07)}
+.bkrow:first-of-type{border-top:0}
+.bk-main{flex:1;min-width:0}
+.bk-name{font-weight:600;overflow-wrap:anywhere}
+.bk-act{flex:none;display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.bk-act .btn{padding:6px 12px;font-size:13px}
+.bk-run{color:#3ddc84}
+@media (max-width:560px){.bkrow,.bkfile{flex-wrap:wrap}.bk-act{width:100%;justify-content:flex-start}}
+.bkform{display:flex;flex-direction:column;gap:12px;padding:4px 8px 8px}
+.bk-f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--dim)}
+.bk-f input,.bk-f select,.bk-f textarea{background:var(--card2);border:0;color:var(--txt);padding:10px 14px;border-radius:12px;font-size:15px;outline:none;font-family:inherit}
+.bk-f textarea{font-family:ui-monospace,Menlo,monospace;font-size:12px;resize:vertical}
+.bk-f small{font-size:12px}
+.bkfiles{display:flex;flex-direction:column;gap:8px;padding:0 4px}
+.bkfile{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.05);border-radius:12px;padding:10px 12px}
 
 /* Pull-to-refresh */
 #ptr{position:absolute;left:50%;top:0;z-index:3;width:40px;height:40px;border-radius:50%;background:#2a2a2a;box-shadow:0 2px 10px rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transform:translate(-50%,-44px)}

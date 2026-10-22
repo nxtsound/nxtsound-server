@@ -14,6 +14,7 @@ os.environ["PLUGIN_USE_VENV"] = "0"  # plugins run with the tests' Python (no pi
 os.environ["PLUGINS_ON_START"] = "0"
 os.environ["ADMIN_PASSWORD_SECRET_FOR_TEST"] = "must-not-reach-the-plugin"
 os.environ["SYSMON_ON_START"] = "0"  # no background checks in the tests
+os.environ["BACKUPS_ON_START"] = "0"  # no schedule of backups in the tests
 os.environ["UPDATE_REPO"] = ""  # tests that look for updates set the repository themselves (and use a fake transport)
 os.environ["ANALYZE"] = "0"  # no background analysis in the tests
 os.environ["ENRICH"] = "0"  # no network in the tests
@@ -46,6 +47,7 @@ def clean_db():
     main.playerhub.reset()
     main.streamguard.reset()
     main.loginguard.reset()
+    main.backup._running.clear()
     main._home_cache.clear()
     yield
 

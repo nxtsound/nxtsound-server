@@ -33,6 +33,8 @@ from pydantic import BaseModel, Field, field_validator
 
 import bpm as bpmlib
 import autolists
+import backup
+import backupdrivers
 import db
 import devices
 import enrich
@@ -110,6 +112,7 @@ mimetypes.add_type("application/manifest+json", ".webmanifest")
 SCAN_ON_START = os.getenv("SCAN_ON_START", "1") != "0"
 PLUGINS_ON_START = os.getenv("PLUGINS_ON_START", "1") != "0"
 SYSMON_ON_START = os.getenv("SYSMON_ON_START", "1") != "0"  # the background checks (disk space, new versions)
+BACKUPS_ON_START = os.getenv("BACKUPS_ON_START", "1") != "0"  # the schedule of the backups to other places
 SCAN_MINUTES = float(os.getenv("SCAN_MINUTES", "0"))  # 0 = only at startup and via the admin button
 
 
@@ -132,6 +135,7 @@ async def _lifespan(_app):
     if SCAN_MINUTES > 0:
         task = asyncio.create_task(_scan_loop())
     mon = asyncio.create_task(sysmon.loop()) if SYSMON_ON_START else None
+    bak = asyncio.create_task(backup.loop()) if BACKUPS_ON_START else None
     import_stop = threading.Event()
     threading.Thread(target=library.watch_imports, args=(import_stop,), daemon=True, name="import-watch").start()
     try:
@@ -140,7 +144,7 @@ async def _lifespan(_app):
         import_stop.set()
         log.info("NxtSound server stopping")
         pluginhost.shutdown()
-        for t in (task, mon):
+        for t in (task, mon, bak):
             if t:
                 t.cancel()
 
@@ -578,6 +582,10 @@ def _render_notification(n: dict) -> dict:
         else:
             body = tr("{device} ({ip}): a network you have not used before.", device=device, ip=d.get("ip", ""))
         nav = "#/account/devices"
+    elif kind == "backup_failed":
+        title = tr("Backup failed: {name}", name=d.get("name", ""))
+        body = d.get("error", "")
+        nav = "#/admin/system"
     return {"id": n["id"], "kind": kind, "system": n["system"], "title": title, "body": body, "nav": nav, "created_at": n["created_at"], "unread": n["unread"]}
 
 
@@ -872,24 +880,117 @@ async def _save_upload(request: Request, limit: int, suffix: str) -> Path:
         raise
 
 
+async def _restore_file(tmp: Path) -> str:
+    """Replaces the database with the backup in `tmp` (checked first; a copy of the current state is saved). Returns the name of that copy."""
+    err = await asyncio.to_thread(db.check_backup, tmp)
+    if err:
+        raise HTTPException(400, err)
+    safety = db.DB_PATH.parent / time.strftime("before-restore-%Y%m%d-%H%M%S.db")
+    await asyncio.to_thread(db.backup_to, safety)
+    await asyncio.to_thread(db.restore_from, tmp)
+    _home_cache.clear()
+    log.info("Backup restored (previous state saved as %s)", safety.name)
+    library.start_scan(full=True)
+    return safety.name
+
+
 @admin.post("/restore")
 async def admin_restore(request: Request):
     """Restores a backup (uploaded file). Replaces users, playlists, history and settings; a copy of the current state is
     saved in the data folder first. All sessions end, the library is rescanned."""
     tmp = await _save_upload(request, MAX_RESTORE_BYTES, ".db")
     try:
-        err = await asyncio.to_thread(db.check_backup, tmp)
-        if err:
-            raise HTTPException(400, err)
-        safety = db.DB_PATH.parent / time.strftime("before-restore-%Y%m%d-%H%M%S.db")
-        await asyncio.to_thread(db.backup_to, safety)
-        await asyncio.to_thread(db.restore_from, tmp)
+        safety = await _restore_file(tmp)
     finally:
         tmp.unlink(missing_ok=True)
-    _home_cache.clear()
-    log.info("Backup restored (previous state saved as %s)", safety.name)
-    library.start_scan(full=True)
-    return {"ok": True, "safety": safety.name}
+    return {"ok": True, "safety": safety}
+
+
+# ---------- Backups to other places (see backup.py) ----------
+
+class BackupTargetIn(BaseModel):
+    id: str | None = Field(default=None, max_length=32)
+    name: str = Field("", max_length=80)
+    type: str = Field("", max_length=16)
+    cfg: dict = {}
+    schedule: str = Field("off", max_length=8)
+    at: str = Field("03:00", max_length=5)
+    keep: int = 7
+
+
+class BackupFileIn(BaseModel):
+    name: str = Field(max_length=80)
+
+
+def _backup_state() -> dict:
+    return {"types": backupdrivers.types(), "schedules": list(backup.SCHEDULES), "targets": [backup.public(t) for t in backup.load()],
+            "max_targets": backup.MAX_TARGETS}
+
+
+def _backup_call(fn, *args):
+    """Runs backup code and turns its problems into answers the admin page can show."""
+    try:
+        return fn(*args)
+    except backup.BackupProblem as e:
+        raise HTTPException(422, str(e))
+    except backupdrivers.BackupError as e:
+        raise HTTPException(400, str(e))
+
+
+@admin.get("/backups")
+def admin_backups():
+    return _backup_state()
+
+
+@admin.put("/backups/targets")
+def admin_backup_target_set(body: BackupTargetIn):
+    """Adds a destination or changes one (a password or key left empty stays as it was)."""
+    t = _backup_call(backup.upsert, body.model_dump())
+    log.info("Backup destination %s saved (%s)", t["name"], t["type"])
+    return {**_backup_state(), "saved": backup.public(t)}
+
+
+@admin.delete("/backups/targets/{target_id}")
+def admin_backup_target_delete(target_id: str):
+    if not backup.remove(target_id):
+        raise HTTPException(404, tr("That destination does not exist any more."))
+    return _backup_state()
+
+
+@admin.post("/backups/test")
+async def admin_backup_test(body: BackupTargetIn):
+    """Tries the settings of a destination (saved or not) without saving anything."""
+    msg = await asyncio.to_thread(_backup_call, backup.test, body.model_dump())
+    return {"ok": True, "message": msg}
+
+
+@admin.post("/backups/targets/{target_id}/run")
+def admin_backup_run(target_id: str):
+    """Starts a backup to this destination in the background; the state of the destination tells when it is done."""
+    _backup_call(backup.start, target_id)
+    return {"started": True}
+
+
+@admin.get("/backups/targets/{target_id}/files")
+async def admin_backup_files(target_id: str):
+    return {"files": await asyncio.to_thread(_backup_call, backup.files, target_id)}
+
+
+@admin.post("/backups/targets/{target_id}/delete-file")
+async def admin_backup_delete_file(target_id: str, body: BackupFileIn):
+    await asyncio.to_thread(_backup_call, backup.delete_file, target_id, body.name)
+    return {"files": await asyncio.to_thread(_backup_call, backup.files, target_id)}
+
+
+@admin.post("/backups/targets/{target_id}/restore")
+async def admin_backup_restore(target_id: str, body: BackupFileIn):
+    """Fetches a backup from the destination and restores it like an uploaded one: the current state is saved first, all logins end."""
+    tmp = await asyncio.to_thread(_backup_call, backup.fetch, target_id, body.name)
+    try:
+        safety = await _restore_file(tmp)
+    finally:
+        tmp.unlink(missing_ok=True)
+    return {"ok": True, "safety": safety}
 
 
 # ---------- Search, radio, streaming ----------
