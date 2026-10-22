@@ -18,7 +18,7 @@ from i18n import tr, trn
 
 MAX_WIDGETS = 30
 _ID = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
-_TRACKS_PER_SHELF = 12
+_TRACKS_PER_SHELF = 10
 
 
 def _int(key: str, label: str, lo: int, hi: int, default: int) -> dict:
@@ -39,13 +39,13 @@ def specs() -> dict[str, dict]:
         "recent": {"title": tr("Recently played"), "description": tr("The songs you played last, a few at a time."), "multiple": False,
                    "options": [_int("pages", tr("Pages"), 1, 3, 3)]},
         "new": {"title": tr("Recently added"), "description": tr("The newest songs in your library."), "multiple": False,
-                "options": [_int("count", tr("Songs"), 6, 24, 12)]},
+                "options": [_int("count", tr("Songs"), 6, 24, 8)]},
         "mix": {"title": tr("Your Mix"), "description": tr("A mix of songs similar to what you listened to recently."), "multiple": False, "options": []},
         "because": {"title": tr("Because you listened to …"), "description": tr("Songs similar to ones you played often, one row per song."), "multiple": False,
-                    "options": [_int("rows", tr("Rows"), 1, 5, 3)]},
+                    "options": [_int("rows", tr("Rows"), 1, 5, 1)]},
         "friends": {"title": tr("What your friends listen to"), "description": tr("What the people you follow listen to (needs Community)."), "multiple": False, "options": []},
         "artists": {"title": tr("Your artists"), "description": tr("The artists you listen to most."), "multiple": False,
-                    "options": [_int("count", tr("Artists"), 6, 20, 10)]},
+                    "options": [_int("count", tr("Artists"), 6, 20, 8)]},
         "rediscover": {"title": tr("Rediscover"), "description": tr("Songs you have not heard for a while, but not forgotten."), "multiple": False,
                        "options": [_int("count", tr("Songs"), 6, 24, 12)]},
         "top": {"title": tr("Your top songs"), "description": tr("The songs you played most, for a period you choose."), "multiple": True,
@@ -236,7 +236,7 @@ async def _new(b: _Build, e: dict, o: dict):
 
 async def _mix(b: _Build, e: dict, o: dict):
     _, lists = await b.similar()
-    mix = _interleave(lists[:3], 30)
+    mix = _interleave(lists[:3], 20)
     return _w(e, "hero", tr("Your Mix"), tr("Based on what you listened to recently"), tracks=mix) if mix else None
 
 
@@ -358,7 +358,7 @@ _BUILDERS: dict[str, Callable[[_Build, dict, dict], Awaitable]] = {
 
 async def build(user_id: int, layout: list[dict], tz: int, allowed: Allowed, friends: Callable[[int], Awaitable[list[dict]]], refresh: bool = False) -> list[dict]:
     """The widgets of a layout with their data, in the layout's order. Widgets without content are left out."""
-    seeds = max([3] + [e["opts"].get("rows", 3) for e in layout if e["type"] == "because"])
+    seeds = max([3] + [e["opts"].get("rows", 1) for e in layout if e["type"] == "because"])
     b = _Build(user_id, tz, allowed, refresh, seeds)
     b.friends = lambda: friends(user_id)
     b.has_new = any(e["type"] == "new" for e in layout)

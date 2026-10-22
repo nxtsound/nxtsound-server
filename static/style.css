@@ -760,3 +760,24 @@ select option{background:#1c1c1e;color:#fff}
 .hw-act .btn .ic{width:16px;height:16px}
 @media (max-width:560px){.hw{flex-wrap:wrap}.hw-act{width:100%;justify-content:flex-end}}
 .hw-o select{background:var(--card);color:var(--txt);border:0;border-radius:18px;padding:8px 12px;font-size:14px;outline:none}
+
+/* Home page, calmer: fewer and smaller covers per row, more air between the sections, one clear focus (the mix) */
+.sect-flat{margin-top:36px}
+.sect-flat + .sect-flat{padding-top:0}
+.sect-flat .card:not(.round){width:104px}
+.sect-flat .card:not(.round) img,.sect-flat .card:not(.round) .ph{width:100px;height:100px}
+.sect-flat .card:not(.round) .t{font-size:13px;font-weight:600}
+.sect-flat .card:not(.round) .a{font-size:11.5px;opacity:.7}
+.sect-flat .card.round{width:92px}
+.sect-flat .card.round img,.sect-flat .card.round .ph{width:84px;height:84px}
+.sect-flat .card.round .t{font-size:12.5px}
+.phead h2{font-size:18px;font-weight:700;letter-spacing:-.02em}
+.sect-hero .phead h2{font-size:21px;font-weight:800}
+.sect-hero{margin-top:36px}
+.sect-hero .card:not(.round){width:136px}
+.sect-hero .card:not(.round) img,.sect-hero .card:not(.round) .ph{width:128px;height:128px}
+.sect-hero .card:not(.round) .t{font-size:14px}
+.sect-flat.sect-because{margin-top:36px;padding-top:0;border-top:0}
+.sect-because ~ .sect-because{margin-top:26px}
+.hscroll{gap:10px}
+.homeedit{margin-top:40px}
