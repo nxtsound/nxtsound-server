@@ -2476,7 +2476,7 @@ async function loadDevices() {
   } catch (_) { /* try again at the next tick */ }
 }
 function openDevices() {
-  openSheet(`<div class="sh-title">${esc(tr('Other devices'))}</div><div class="dim small" style="padding:0 4px 10px">${esc(tr('Control what plays on your other devices. Playing something here does not stop them.'))}</div><div class="dvlist"></div>`);
+  openSheet(`<div class="sh-title">${esc(tr('Other devices'))}</div>`);
   DEVS.sig = ''; DEVS.list = [];
   loadDevices();
   clearInterval(DEVS.timer); clearInterval(DEVS.tick);
