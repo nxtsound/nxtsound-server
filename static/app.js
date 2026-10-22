@@ -1306,7 +1306,7 @@ function backupsCard(bk) {
       <div class="bk-act"><button class="btn sec" data-act="bkRun" data-id="${esc(t.id)}"${s.running ? ' disabled' : ''}>${esc(tr('Back up now'))}</button>
       <button class="btn sec" data-act="bkFiles" data-id="${esc(t.id)}">${esc(tr('Backups'))}</button><button class="btn sec" data-act="bkEdit" data-id="${esc(t.id)}">${esc(tr('Edit'))}</button></div></div>`;
   };
-  return `<section class="acard"><h3>${esc(tr('Backups to other places'))}</h3>
+  return `<section class="acard"><h3>${esc(tr('Backups to other places'))} <span class="nsys">Experimental</span>  </h3>
     <p class="dim small" style="margin:0 0 10px">${esc(tr('Copies of the database (users, playlists, history, settings) go to a folder, S3, Nextcloud or ownCloud, FTP or SFTP, by hand or on a schedule. The music files are not part of it.'))}</p>
     ${bk.targets.map(row).join('') || `<div class="sub" style="margin:0 0 8px">${esc(tr('No destination yet.'))}</div>`}
     <div class="actions" style="margin:10px 0 0"><button class="btn sec" data-act="bkAdd"${bk.targets.length >= bk.max_targets ? ' disabled' : ''}>+ ${esc(tr('Add a destination'))}</button></div>

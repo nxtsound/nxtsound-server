@@ -87,11 +87,11 @@ def _fields_sftp():
 def types() -> dict:
     """type -> {label, fields}; in the language of the request."""
     return {
-        "local": {"label": tr("Folder on the server (also NFS)"), "fields": _fields_local()},
-        "s3": {"label": tr("S3 (Amazon, MinIO, Backblaze ...)"), "fields": _fields_s3()},
-        "webdav": {"label": tr("Nextcloud / ownCloud / WebDAV"), "fields": _fields_webdav()},
-        "ftp": {"label": tr("FTP / FTPS"), "fields": _fields_ftp()},
-        "sftp": {"label": tr("SFTP (SSH)"), "fields": _fields_sftp()},
+        "local": {"label": tr("Folder on the server (also NFS)")+" (tested)", "fields": _fields_local()},
+        "s3": {"label": tr("S3 (Amazon, MinIO, Backblaze ...)")+" (tested)", "fields": _fields_s3()},
+        "webdav": {"label": tr("Nextcloud / ownCloud / WebDAV")+" (untested)", "fields": _fields_webdav()},
+        "ftp": {"label": tr("FTP / FTPS")+" (untested)", "fields": _fields_ftp()},
+        "sftp": {"label": tr("SFTP (SSH)")+" (untested)", "fields": _fields_sftp()},
     }
 
 
