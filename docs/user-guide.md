@@ -317,6 +317,47 @@ Your music files are your music; the **database** holds accounts, playlists, lik
 
 Without the web app: stop the container and copy the Docker volume (`app-data`), or back up the folder you mounted as `/data`.
 
+### Backups to other places (automatic)
+
+Downloading by hand is easy to forget. Admin area → System → **Backups to other places** sends a copy of the database to a destination you choose, by hand (*Back up now*) or on a schedule.
+The music files are not part of it. You can add up to ten destinations, each with its own schedule.
+
+| Destination | What you enter | Notes |
+|---|---|---|
+| **Folder on the server** | the path, for example `/backups` | The Docker setup mounts `BACKUP_PATH` (default `./backups`) at `/backups`. For **NFS**, mount the share on the host and point `BACKUP_PATH` to it, or give the container an NFS volume (see below). |
+| **S3** (Amazon, MinIO, Backblaze B2, Wasabi ...) | endpoint, region, bucket, an optional folder in the bucket, access key and secret key | Addresses of the form `endpoint/bucket/...` (path style). Give the key only the rights it needs for this bucket. |
+| **Nextcloud / ownCloud / WebDAV** | the address of your cloud (`https://cloud.example.com`), user name, an **app password**, a folder | The folder is created if it is missing. A full WebDAV address also works. |
+| **FTP / FTPS** | server, port, user, password, folder, encryption | Use FTPS if the server offers it. "Accept any certificate" is for servers with a self-signed certificate. |
+| **SFTP** (SSH) | server, port, user, a password **or** a private key, folder | The server's key is remembered at the first connection and checked from then on; a changed key stops the backup until you clear the fingerprint. |
+
+**Schedule:** every 6 or 12 hours, daily or weekly (Sundays) at a time you set (server time, in Docker usually UTC). If the server was off at that time, the backup is made when it is back.
+A failed backup is tried again every half hour, and the admins get a message in the bell until one works. **Keep the last** says how many backups stay on the destination; older ones are deleted
+(only files that this server made, named `nxtsound-<date>-<time>.db`: other files in the folder are never touched). *Test the connection* tries the settings without saving them.
+
+**Restore from a destination:** the *Backups* button of a destination lists what is there, newest first. *Restore* does the same as restoring an uploaded file: it checks the backup,
+saves a copy of the current state in the data folder, replaces the data and signs everybody out.
+
+**Keep in mind:** a backup contains password hashes, the settings of your plugins and the passwords and keys of your destinations. The passwords of the destinations stay on the server (the admin page never shows them again;
+leave a password field empty to keep it), but a backup file that lies on a cloud contains them. Use an account or key that may only write to the backup place.
+
+**NFS volume for Docker** (instead of mounting the share on the host):
+
+```yaml
+services:
+  server:
+    volumes:
+      - nas-backups:/backups
+volumes:
+  nas-backups:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=192.168.1.20,rw,nfsvers=4
+      device: ":/export/nxtsound-backups"
+```
+
+The container writes as user 1000: the share must allow that (on a NAS, set the squash option to map all users or give user 1000 write access).
+
 ## Running it on the internet
 
 At home, `http://<address>:8000` is fine. To reach it from outside:

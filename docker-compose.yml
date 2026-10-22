@@ -44,6 +44,7 @@ services:
       - app-data:/data
       - "${MUSIC_PATH:-./music}:/music:${MUSIC_ACCESS:-ro}"   # music folder; read-only unless MUSIC_ACCESS=rw (then plugins keep songs in /music/<plugin>/)
       - "${PLUGINS_PATH:-./plugins}:/plugins"   # plugins (installed by hand or in the admin area)
+      - "${BACKUP_PATH:-./backups}:/backups"    # a place for backups: Admin area -> System -> Backups to other places -> "Folder on the server" -> /backups
 
 volumes:
   app-data:

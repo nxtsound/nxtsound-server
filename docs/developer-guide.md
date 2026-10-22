@@ -59,6 +59,8 @@ secure by default, and the core stays free of any third-party service.
 | `playerhub.py` | Remote control: every visible page and every player with a queue keeps a server-sent-events stream (`GET /api/player/events`); players with a queue publish their state (`POST /api/player/state`). The stream pushes the list of the other devices when it changes (`devices` event: who plays what; the header dot follows it) and delivers commands (`POST /api/player/command`). `GET /api/player/devices` gives the same list on demand. In memory, one server process. |
 | `devices.py` | Browser and system from a User-Agent, for the list of a user's devices (logins). |
 | `homewidgets.py` | The home page: catalog of widgets with their options, the default layout, checking a saved layout, building each widget's data. Add a widget: a spec in `specs()`, a builder in `_BUILDERS`, a view in `widgetHtml()` (`app.js`). |
+| `backup.py` | Backups to other places: the destinations (JSON in the settings), making a backup, keeping the last N, the schedule (`due`, `loop`), restoring from a destination. |
+| `backupdrivers.py` | The destination types: folder, S3 (own Signature V4, path style), WebDAV (httpx), FTP/FTPS (ftplib), SFTP (paramiko). Each has `test`, `put`, `list`, `get`, `delete`; `types()` describes their fields and the admin page draws its form from that. Add a type: a class, an entry in `types()` and `make()`, tests like `tests/test_backupdrivers.py`. |
 | `bpm.py` | Tempo, beat grid, key and intro/outro analysis for DJ mode (ffmpeg + numpy). |
 | `enrich.py` | Year, cover and artist description from MusicBrainz and the Cover Art Archive. |
 | `plugins.py` | The core's view of plugins: registry, calls to a plugin's HTTP API, ID prefixing, caching. |
