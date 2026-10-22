@@ -3076,12 +3076,25 @@ function setMediaSession(t) {
 const DJ = {
   on: false, style: 'auto', ctx: null, nodes: null, unlocked: false,
   info: {}, plan: null, mixing: false, timer: 0, warmSec: 6, rateTimer: 0,
+  fadeSec: 6,        // length of a plain crossfade
+  fadeFallback: true, // songs that cannot be matched on the beat are crossfaded instead of cut
 };
 // iPhone/iPad: DJ mode off (iOS does not clock two audio elements reliably in the background: stuttering, loops, drifting tempo)
 const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const AC = IOS ? null : (window.AudioContext || window.webkitAudioContext);
-try { DJ.on = !!AC && localStorage.getItem('app_dj') === '1'; DJ.style = localStorage.getItem('app_dj_style') || 'auto'; } catch (_) { /* without storage */ }
-const djSave = () => { try { localStorage.setItem('app_dj', DJ.on ? '1' : '0'); localStorage.setItem('app_dj_style', DJ.style); } catch (_) { /* ignore */ } };
+try {
+  DJ.on = !!AC && localStorage.getItem('app_dj') === '1';
+  DJ.style = localStorage.getItem('app_dj_style') || 'auto';
+  const fs = parseInt(localStorage.getItem('app_dj_fade'), 10);
+  if (fs >= 2 && fs <= 12) DJ.fadeSec = fs;
+  DJ.fadeFallback = localStorage.getItem('app_dj_fb') !== '0';
+} catch (_) { /* without storage */ }
+const djSave = () => {
+  try {
+    localStorage.setItem('app_dj', DJ.on ? '1' : '0'); localStorage.setItem('app_dj_style', DJ.style);
+    localStorage.setItem('app_dj_fade', String(DJ.fadeSec)); localStorage.setItem('app_dj_fb', DJ.fadeFallback ? '1' : '0');
+  } catch (_) { /* ignore */ }
+};
 const otherEl = () => (curEl === elA ? elB : elA);
 const nodeOf = (el) => (el === elA ? DJ.nodes.A : DJ.nodes.B);
 
@@ -3155,7 +3168,7 @@ function syncDj() {
   const b = $('#fDjBtn');
   b.hidden = !AC;
   b.classList.toggle('on', DJ.on);
-  const names = { auto: tr('Random'), blend: tr('Mix'), filter: tr('Filter'), echo: tr('Echo') };
+  const names = { auto: tr('Random'), blend: tr('Mix'), filter: tr('Filter'), echo: tr('Echo'), fade: tr('Crossfade') };
   $('#fDjLbl').innerHTML = DJ.on ? `DJ <small>${names[DJ.style] || ''}</small>` : 'DJ';
 }
 
@@ -3241,6 +3254,15 @@ function djPlan(nt, a, b, dur) {
   return { id: nt.id, style, lock, rate, tA, mixSec, beatA, fbA: fA, fbB: fB, bpmB: bb, X, warm: false, started: false, switched: false, info: { fit, hot, hasOutro, bars, mb } };
 }
 
+// A plain crossfade: the end of the song fades out while the next one fades in from its start. Needs no tempo, works for every song.
+function djPlanFade(nt, a, dur) {
+  const endA = Math.min(dur, (a && a.audio_end) || dur) - 0.5;  // without the silence at the end, if the analysis knows it
+  const mixSec = Math.min(DJ.fadeSec, Math.max(2, (dur - 5) / 4));
+  const tA = endA - mixSec;
+  if (tA - audio.currentTime < DJ.warmSec + 1) return { skip: true };  // too late for this one (a seek near the end, a very short song)
+  return { id: nt.id, style: 'fade', fade: true, lock: false, rate: 1, tA, mixSec, beatA: 1, X: 0, warm: false, started: false, switched: false, info: {} };
+}
+
 function djPhaseErr(p, ea, eb) {
   const pa = (ea.currentTime - p.fbA) / p.beatA;
   const pb = (eb.currentTime - p.fbB) / (60 / p.bpmB);
@@ -3261,6 +3283,12 @@ function djWarm(p) {
   const el = otherEl();
   const n = nodeOf(el);
   djNeutral(n, 0);
+  if (p.fade) {  // only load the next song now; it starts at the beginning when the fade does
+    el.playbackRate = 1;
+    el.preload = 'auto';
+    el.src = `/api/stream/${encodeURIComponent(p.id)}`;
+    return;
+  }
   el.preservesPitch = true; el.webkitPreservesPitch = true;
   el.playbackRate = p.rate;
   el.src = `/api/stream/${encodeURIComponent(p.id)}`;
@@ -3278,7 +3306,10 @@ function djStart(p) {
   const fade = (g, up, at, len) => { g.cancelScheduledValues(at); g.setValueCurveAtTime(curve(up), at, len); };
   const cl = (n) => { [n.hp.frequency, n.lp.frequency, n.gain.gain, n.send.gain].forEach((x) => x.cancelScheduledValues(t0)); };
   cl(A); cl(B);
-  if (p.style === 'blend') {  // swap bass: B comes in without bass, in the middle the bass switches from A to B
+  if (p.fade) {  // equal-power crossfade, the next song starts from its beginning
+    otherEl().play().catch(() => djAbort());
+    fade(A.gain.gain, false, t0, M); fade(B.gain.gain, true, t0, M);
+  } else if (p.style === 'blend') {  // swap bass: B comes in without bass, in the middle the bass switches from A to B
     fade(A.gain.gain, false, t0, M); fade(B.gain.gain, true, t0, M);
     B.hp.frequency.setValueAtTime(450, t0); B.hp.frequency.setValueAtTime(450, t0 + M * 0.5); B.hp.frequency.linearRampToValueAtTime(10, t0 + M * 0.5 + 0.4);
     A.hp.frequency.setValueAtTime(10, t0 + M * 0.5); A.hp.frequency.linearRampToValueAtTime(450, t0 + M * 0.5 + 0.4);
@@ -3360,13 +3391,20 @@ function djTick() {
   }
   const t = currentTrack(), nt = S.queue[S.idx + 1];
   const dur = audio.duration;
-  if (!t || !nt || S.repeat === 'one' || !isFinite(dur) || dur < 60 || dur >= 600 || S.loading) return;
-  if (audio.currentTime < 3) djFetch(t);
+  const fadeOnly = DJ.style === 'fade';
+  if (!t || !nt || S.repeat === 'one' || !isFinite(dur) || dur < (fadeOnly || DJ.fadeFallback ? 30 : 60) || dur >= 600 || S.loading) return;
+  if (!fadeOnly && audio.currentTime < 3) djFetch(t);
   if (dur - audio.currentTime > 140) return;
-  djFetch(t); djFetch(nt);
+  if (!fadeOnly) { djFetch(t); djFetch(nt); }
   if (!p) {
     const a = DJ.info[t.id], b = DJ.info[nt.id];
-    if (a && b && a.ready && b.ready) DJ.plan = djPlan(nt, a, b, dur);
+    if (fadeOnly) DJ.plan = djPlanFade(nt, a, dur);
+    else if (a && b && a.ready && b.ready) {
+      DJ.plan = djPlan(nt, a, b, dur);
+      if (DJ.plan.skip && DJ.fadeFallback) DJ.plan = djPlanFade(nt, a, dur);  // cannot be matched on the beat: blend them anyway
+    } else if (DJ.fadeFallback && dur - audio.currentTime < DJ.fadeSec + DJ.warmSec + 12) {
+      DJ.plan = djPlanFade(nt, a, dur);  // the analysis is not there in time: do not cut
+    }
     return;
   }
   if (p.skip) return;
@@ -3392,9 +3430,12 @@ elA.addEventListener('error', () => { if (elA !== curEl && DJ.plan && DJ.plan.wa
 
 $('#fDjBtn').addEventListener('click', () => {
   if (!DJ.on) { djEnable(true); return; }
-  const styles = [['auto', tr('Random')], ['blend', tr('Mix (swap bass)')], ['filter', tr('Filter sweep')], ['echo', tr('Echo')]];
+  const styles = [['auto', tr('Random')], ['blend', tr('Mix (swap bass)')], ['filter', tr('Filter sweep')], ['echo', tr('Echo')], ['fade', tr('Crossfade')]];
+  const next = { 3: 6, 6: 9, 9: 12 };
   sheetMenu(tr('DJ mode'), [
     ...styles.map(([k, l]) => ({ label: (DJ.style === k ? '✓ ' : '') + tr('Style: {name}', { name: l }), fn: () => { DJ.style = k; djSave(); syncDj(); } })),
+    { label: tr('Crossfade length: {n} s', { n: DJ.fadeSec }), fn: () => { DJ.fadeSec = next[DJ.fadeSec] || 3; djSave(); toast(tr('Crossfade length: {n} s', { n: DJ.fadeSec })); } },
+    { label: (DJ.fadeFallback ? '✓ ' : '') + tr('Crossfade songs that cannot be matched on the beat'), fn: () => { DJ.fadeFallback = !DJ.fadeFallback; djSave(); } },
     { label: tr('Turn off DJ mode'), fn: () => djEnable(false), danger: true },
   ]);
 });
