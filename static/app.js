@@ -173,6 +173,8 @@ class ApiError extends Error {
   constructor(msg, status) { super(msg); this.status = status; }
 }
 
+const onHome = () => (location.hash || '#/home').startsWith('#/home');
+
 // ---------- API ----------
 
 async function api(path, opts = {}, timeoutMs = 25000) {
@@ -643,7 +645,6 @@ function initPull() {
   const ind = $('#ptr');
   let y0 = null, x0 = 0, pull = 0, busy = false;
   const TH = 70;
-  const onHome = () => (location.hash || '#/home').startsWith('#/home');
   const canPull = () => $('#sheet').hidden && !$('#full').classList.contains('open') && $('#tour').hidden;
   const set = (px, anim) => {
     ind.style.transition = anim ? 'transform .25s ease, opacity .25s' : 'none';
