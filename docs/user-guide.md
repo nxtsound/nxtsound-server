@@ -402,6 +402,27 @@ from NxtSound. Allow request bodies up to 50 MB for `/api/admin/plugins/upload` 
 `/api/admin/restore`), and let `multipart/form-data` pass the firewall rules (ModSecurity, BunkerWeb and the like) for these two paths.
 Reaching the server's port directly always works for a test.
 
+**Rate limits in a firewall or proxy.** NxtSound itself has no limit for requests per second (only the [login protection](#admin-area)). If your firewall or proxy limits
+requests per IP address, these are the numbers one browser causes (measured against a demo instance; yours vary with the length of your shelves and the speed of your connection):
+
+| What happens | Requests | Note |
+|---|---|---|
+| Opening the home page | about 40 to 60 within 1 to 2 seconds | the biggest burst: cover pictures (about 25), the app's files and about 10 calls. Other pages with many covers are similar. |
+| A device is playing | about 0.25 per second (14 per minute) | a sign of life every 15 s, the playing state every 10 s, the bell once a minute, one entry per song you listened to |
+| The devices window is open | another 0.3 per second | asks for the list every 3 s |
+| Typing in the search | up to about 8 per second | one suggestion request per letter |
+| Starting a song | 1 to 3 | the audio file (more when you skip around in it) and the next song loaded ahead |
+| Event stream (remote control) | 1 long connection per visible tab, no requests per second | a ping every 20 s |
+
+What follows from that:
+
+- **Several devices share one address** at home (phones, TV, computers), so their bursts add up. A limit of 100 requests per 10 seconds per IP is too tight; start at **300 per 10 seconds**
+  (or about 600 per minute) for `/api/`, and raise it if people report errors while opening pages.
+- Count `/api/stream/` (audio) and `/api/cover/` (pictures) separately or not at all: they are the bulk of the traffic.
+- `/api/login` can be limited hard (say 10 per minute per IP). The login protection does something similar on its own, but only sees the right address with `TRUST_PROXY=1`.
+- `/api/player/events` is a long-lived connection (server-sent events): switch response buffering off for it (the nginx example above does) and allow at least 60 seconds without data.
+  Idle timeouts of 100 seconds or more (Cloudflare and the like) are fine, the server pings every 20 seconds.
+
 ## Privacy
 
 - Your music, history, playlists and likes live on **your** server only.
