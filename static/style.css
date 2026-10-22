@@ -198,6 +198,15 @@ body{background:transparent;position:relative}
 .dots i{width:6px;height:6px;border-radius:3px;background:rgba(255,255,255,.28);transition:width .2s,background .2s}
 .dots i.on{width:18px;background:#fff}
 
+/* Keyboard shortcuts window */
+.kbd-groups{display:grid;grid-template-columns:1fr;gap:6px 36px;padding:4px 10px 6px}
+@media (min-width:900px){#sheet .panel:has(.kbd-groups){width:min(760px,100%)}.kbd-groups{display:block;columns:2;column-gap:36px}.kbd-groups section{break-inside:avoid}}
+.kbd-groups h4{margin:14px 0 4px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+.kbd-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:14px}
+.kbd-keys{display:flex;align-items:center;gap:6px;flex:none}
+kbd{display:inline-block;min-width:24px;padding:2px 8px;text-align:center;font:600 12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--txt);background:var(--card2);border:1px solid rgba(255,255,255,.16);border-bottom-width:2px;border-radius:6px}
+.kbd-keys .then{font-size:11px;color:var(--dim)}
+
 /* Pull-to-refresh */
 #ptr{position:absolute;left:50%;top:0;z-index:3;width:40px;height:40px;border-radius:50%;background:#2a2a2a;box-shadow:0 2px 10px rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transform:translate(-50%,-44px)}
 #ptr.spin .ic{animation:ptrspin .8s linear infinite}

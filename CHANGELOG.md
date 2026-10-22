@@ -14,9 +14,13 @@ minor versions may contain breaking changes, which are called out.
 - **Login protection you can set:** Admin area → System → Login protection sets how many failed logins an address may make and how long it is blocked afterwards (defaults 5 and 5 minutes, `LOGIN_MAX_ATTEMPTS` and `LOGIN_BLOCK_MINUTES`). Blocks survive a restart and can be lifted there. `0` attempts turns the protection off.
 - **A home page you can arrange:** *Customize home* (at the bottom of the home page) lets every user choose which sections appear, their order and their options (rows, number of songs, period). Besides the existing sections there are new ones: *Rediscover*, *Your top songs* (week, month, year, all time), *Genres*, *Decades*, *Artist mixes*, *Discover*, *Your playlists*, *Shuffle your liked songs*, *Recap in numbers*, *A year ago* and *Your mix for this time of day*. Sections with nothing to show stay hidden; *Back to the default* restores the original page.
 - **Crossfade (part of DJ mode):** the DJ menu has a new style *Crossfade*: the end of a song fades out while the next one fades in from its start, with a length of 3, 6, 9 or 12 seconds. It needs no tempo analysis. With *Crossfade songs that cannot be matched on the beat* (on by default) DJ mode also blends songs whose tempo could not be detected or matched, instead of cutting from one to the next. Like the rest of DJ mode it is not available on iPhone and iPad.
+- **More keyboard shortcuts and a list of them:** a keyboard button in the top bar (computer only) or the key `?` opens a window with all shortcuts. New: `S` shuffle, `R` repeat, `A` add to a playlist, `F` big player, `Q` queue, `0` to `9` jump to 0 to 90 % of the song, `G` then `H`, `P`, `L` or `C` go to Home, Playlists, Liked songs or Community.
 
 ### Changed
 - **Calmer home page:** "Recently played" is smaller (2 x 2 per page, three pages at most), "Recently added" comes right after it instead of at the bottom, "Your Mix" spans the full width and keeps its red divider, and each "Because you listened to ..." shelf starts with the cover of its song.
+
+### Fixed
+- `Esc` closed a window and the big player behind it at the same time; now it closes one thing per press.
 
 
 ## [0.2.0] – 2026-10-21

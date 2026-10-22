@@ -191,8 +191,9 @@ The bar at the bottom shows what plays. Tap it to open the full-screen player:
 The ⋮ menu next to any song offers: play next, add to queue, add to playlist, like, start radio, go to artist or album, and
 **"Stop recommending"** (hides this song or artist from your recommendations without deleting anything).
 
-**Keyboard shortcuts** (computer): `Space` or `k` play/pause · `n` / `p` next/previous · `←` `→` seek 10 s · `↑` `↓` volume ·
-`m` mute · `l` like · `/` search · `Esc` close.
+**Keyboard shortcuts** (computer): the keyboard button in the top bar (or the key `?`) shows them all. `Space` or `k` play/pause · `n` / `p` next/previous ·
+`←` `→` seek 10 s · `0`–`9` jump to 0–90 % of the song · `↑` `↓` volume · `m` mute · `s` shuffle · `r` repeat · `l` like · `a` add to a playlist · `f` big player ·
+`q` queue · `/` search · `g` then `h`, `p`, `l` or `c` go to Home, Playlists, Liked songs or Community · `Esc` close.
 
 ### DJ mode (alpha)
 
