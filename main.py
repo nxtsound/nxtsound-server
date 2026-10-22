@@ -495,8 +495,8 @@ def player_claim(body: PlayerIn | None = None, user: dict = Depends(current_user
     """A player starts playing (claim) or keeps playing (heartbeat). 409 with a message if the account already plays as many streams as allowed."""
     ok, active, cap = streamguard.claim(user["id"], user["sid"], body.player if body else "")
     if not ok:
-        raise HTTPException(409, trn(cap, "This account is already playing one stream, the most the admin allows. Pause it to play here.",
-                                    "This account is already playing {n} streams, the most the admin allows. Pause one of them to play here."))
+        raise HTTPException(409, trn(cap, "This account is already playing on to much devices at the same time.",
+                                    "This account is already playing {n} streams. To much devices at the same time."))
     return {"ok": True, "active": active, "limit": cap}
 
 
