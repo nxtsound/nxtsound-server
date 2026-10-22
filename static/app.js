@@ -528,21 +528,23 @@ async function renderHome(my, refresh = false) {
   } else if (d.community && d.community.following === 0) {
     friendsHtml = `<section class="sect sect-flat"><div class="phead"><h2>${esc(tr('Community'))}</h2><div class="sub">${esc(tr('Follow friends to see what they listen to.'))}</div></div><div class="actions" style="margin:4px 8px 0"><button class="btn sec" data-nav="#/community">${esc(tr('Find people'))}</button></div></section>`;
   }
+  const friendsAt = d.shelves.findIndex((sh) => sh.kind === 'because') - 1;  // the friends row sits in front of the "because" shelves
   d.shelves.forEach((sh, si) => {
     const key = 's' + si;
     setList(key, sh.tracks);
-    const head = `<div class="phead"><h2>${esc(sh.title)}</h2>${sh.subtitle ? `<div class="sub">${esc(sh.subtitle)}</div>` : ''}</div>`;
+    const title = `<div class="ptext"><h2>${esc(sh.title)}</h2>${sh.subtitle ? `<div class="sub">${esc(sh.subtitle)}</div>` : ''}</div>`;
+    const head = `<div class="phead${sh.thumb !== undefined ? ' withcover' : ''}">${sh.thumb !== undefined ? cover(sh.thumb) : ''}${title}</div>`;
     if (sh.kind === 'recent') {
-      const items = sh.tracks.slice(0, 18);
+      const items = sh.tracks.slice(0, 12);  // 2 x 2 per page, three pages at most
       const pages = [];
-      for (let p = 0; p < items.length; p += 6) pages.push(items.slice(p, p + 6).map((t, j) => qTile(t, key, p + j)).join(''));
+      for (let p = 0; p < items.length; p += 4) pages.push(items.slice(p, p + 4).map((t, j) => qTile(t, key, p + j)).join(''));
       const dots = pages.length > 1 ? `<div class="dots">${pages.map((_, p) => `<i${p ? '' : ' class="on"'}></i>`).join('')}</div>` : '';
       html += `<section class="sect sect-flat">${head}<div class="pager">${pages.map((p) => `<div class="ppage">${p}</div>`).join('')}</div>${dots}</section>`;
     } else {
-      const cls = sh.kind === 'mix' ? ' sect-hero' : ' sect-flat';
+      const cls = sh.kind === 'mix' ? ' sect-hero' : sh.kind === 'because' ? ' sect-flat sect-because' : ' sect-flat';
       html += `<section class="sect${cls}">${head}<div class="hscroll">${sh.tracks.map((t, i) => trackCard(t, key, i)).join('')}</div></section>`;
     }
-    if (si === 0) html += friendsHtml;
+    if (si === (friendsAt >= 0 ? friendsAt : d.shelves.length - 1)) html += friendsHtml;
   });
   if (d.artists.length) html += `<section class="sect sect-flat"><div class="phead"><h2>${esc(tr('Your artists'))}</h2></div><div class="hscroll">${d.artists.map(artistCard).join('')}</div></section>`;
   view.innerHTML = html + await versionLine();

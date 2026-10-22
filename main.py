@@ -1425,17 +1425,18 @@ async def _build_home(user_id: int) -> dict:
 
     results = [_allowed(r, blocked) for r in await asyncio.gather(*(similar_to(s) for s in seeds))]
     lists = [[t for t in r if t["id"] not in known] for r in results]
+    # Order: what you just heard, what is new in the library, your mix, then the "because" shelves (the friends row goes in front of those).
     shelves = [{"kind": "recent", "title": tr("Recently played"), "subtitle": "", "tracks": recent[:12]}]
+    new = [t for t in fresh if t["id"] not in known][:12]
+    if new:
+        shelves.append({"kind": "new", "title": tr("Recently added"), "subtitle": "", "tracks": new})
     mix = _interleave(lists, 30)
     if mix:
         shelves.append({"kind": "mix", "title": tr("Your Mix"), "subtitle": tr("Based on what you listened to recently"), "tracks": mix})
     for seed, r in zip(seeds, results):
         tracks = [t for t in r if t["id"] not in known][:12]
         if tracks:
-            shelves.append({"kind": "because", "title": tr("Because you listened to “{title}”", title=seed["title"]), "subtitle": seed["artist"], "tracks": tracks})
-    new = [t for t in fresh if t["id"] not in known][:12]
-    if new:
-        shelves.append({"kind": "new", "title": tr("Recently added"), "subtitle": "", "tracks": new})
+            shelves.append({"kind": "because", "title": tr("Because you listened to “{title}”", title=seed["title"]), "subtitle": seed["artist"], "thumb": seed.get("thumb", ""), "tracks": tracks})
     artists = await asyncio.to_thread(db.top_artists, user_id, 10)
     return {"empty": False, "shelves": shelves, "artists": artists}
 
