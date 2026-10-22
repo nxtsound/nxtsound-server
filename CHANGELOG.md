@@ -11,6 +11,7 @@ minor versions may contain breaking changes, which are called out.
 - **Login alerts:** when an account is logged in from a device (browser and system) or a network (address group) the user has not used before, they get a message in their bell that links to *Account → Devices*. The very first login of a user raises nothing. Admin area → System → Login alerts turns it off (`LOGIN_ALERTS`).
 - **Devices:** Account → Devices lists every browser and app you are logged in on (name, browser and system, when you logged in, when it was last used, IP address). Give a device a name, log a single device out, or log out everywhere else.
 - **Limit for playing at the same time:** Admin area → System → Playing at the same time sets how many streams of one account may play at once (`MAX_STREAMS_PER_USER`, default 0 = no limit). Every player counts, a browser tab as well as an app, even several in the same login. A further player is told so when it tries to start and does not play; the ones that already play are not disturbed. Pausing or closing the tab frees the place. The admin also sees who plays right now.
+- **Login protection you can set:** Admin area → System → Login protection sets how many failed logins an address may make and how long it is blocked afterwards (defaults 5 and 5 minutes, `LOGIN_MAX_ATTEMPTS` and `LOGIN_BLOCK_MINUTES`). Blocks survive a restart and can be lifted there. `0` attempts turns the protection off.
 
 
 ## [0.2.0] – 2026-10-21

@@ -102,6 +102,10 @@ CREATE TABLE IF NOT EXISTS login_history(
   system TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_login_history_user ON login_history(user_id, id);
+CREATE TABLE IF NOT EXISTS login_blocks(
+  key TEXT PRIMARY KEY,
+  until INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS playlists(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -565,6 +569,7 @@ def restore_from(source: Path) -> None:
         try:
             src.backup(dst)
             dst.execute("DELETE FROM sessions")
+            dst.execute("DELETE FROM login_blocks")
             dst.commit()
         finally:
             dst.close()
@@ -576,13 +581,14 @@ def restore_from(source: Path) -> None:
 # ---------- Backup ----------
 
 def backup_to(target: Path) -> None:
-    """Consistent copy of the running database (SQLite backup API). Sessions are not included."""
+    """Consistent copy of the running database (SQLite backup API). Sessions and login blocks are not included."""
     src = sqlite3.connect(DB_PATH, timeout=10)
     try:
         dst = sqlite3.connect(target)
         try:
             src.backup(dst)
             dst.execute("DELETE FROM sessions")
+            dst.execute("DELETE FROM login_blocks")
             dst.commit()
             dst.execute("VACUUM")
         finally:
@@ -1329,6 +1335,36 @@ def get_setting(key: str, default: str = "") -> str:
 def set_setting(key: str, value: str) -> None:
     with db() as c:
         c.execute("INSERT INTO settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+
+
+# ---------- Login blocks (see loginguard.py) ----------
+
+def add_login_block(key: str, until: float) -> None:
+    with db() as c:
+        c.execute("INSERT INTO login_blocks(key, until) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET until = excluded.until", (key, int(until)))
+
+
+def login_block_until(keys: list[str]) -> int:
+    """The latest end among the running blocks of these keys, 0 if none of them is blocked."""
+    marks = ",".join("?" * len(keys))
+    with db() as c:
+        r = c.execute(f"SELECT MAX(until) FROM login_blocks WHERE key IN ({marks}) AND until > ?", (*keys, _now())).fetchone()
+    return int(r[0] or 0)
+
+
+def login_blocks() -> list[dict]:
+    """The blocks that are still running, the longest remaining first. Expired ones are removed on the way."""
+    with db() as c:
+        c.execute("DELETE FROM login_blocks WHERE until <= ?", (_now(),))
+        return [{"key": r["key"], "until": r["until"]} for r in c.execute("SELECT key, until FROM login_blocks ORDER BY until DESC")]
+
+
+def delete_login_blocks(key: str | None = None) -> int:
+    """Lifts one block (by key) or, without a key, all. Returns how many were lifted."""
+    with db() as c:
+        if key is None:
+            return c.execute("DELETE FROM login_blocks").rowcount
+        return c.execute("DELETE FROM login_blocks WHERE key = ?", (key,)).rowcount
 
 
 def add_stream_stat(mode: str, ms: int) -> None:

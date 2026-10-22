@@ -39,6 +39,7 @@ import enrich
 import i18n
 import logconf
 import loginalerts
+import loginguard
 import pluginhost
 import plugins
 import library
@@ -277,29 +278,16 @@ def _valid_user_name(raw: str) -> str:
     return name
 
 
-_login_fails: dict[tuple[str, str], list[float]] = {}  # (ip, name | "*") -> times of failed attempts
-LOGIN_MAX_FAILS = 5        # per IP and name
-LOGIN_MAX_FAILS_IP = 20    # per IP across all names
-LOGIN_WINDOW = 300.0
-
-
 def _throttle_check(request: Request, name: str) -> None:
-    ip, now = _client_ip(request), time.time()
-    if len(_login_fails) > 5000:  # bound memory use
-        for k in [k for k, v in _login_fails.items() if not v or now - v[-1] > LOGIN_WINDOW]:
-            _login_fails.pop(k, None)
-    for key, limit in (((ip, name.lower()), LOGIN_MAX_FAILS), ((ip, "*"), LOGIN_MAX_FAILS_IP)):
-        fails = [t for t in _login_fails.get(key, []) if now - t < LOGIN_WINDOW]
-        _login_fails[key] = fails
-        if len(fails) >= limit:
-            wait = int(LOGIN_WINDOW - (now - fails[0])) + 1
-            raise HTTPException(429, tr("Too many attempts. Please try again in {wait} s.", wait=wait))
+    wait = loginguard.blocked_seconds(_client_ip(request), name)
+    if wait >= 120:
+        raise HTTPException(429, tr("Too many attempts. Please try again in {wait} min.", wait=-(-wait // 60)))
+    if wait:
+        raise HTTPException(429, tr("Too many attempts. Please try again in {wait} s.", wait=wait))
 
 
 def _record_fail(request: Request, name: str) -> None:
-    ip, now = _client_ip(request), time.time()
-    for key in ((ip, name.lower()), (ip, "*")):
-        _login_fails.setdefault(key, []).append(now)
+    loginguard.record_fail(_client_ip(request), name)
 
 
 def _start_session(request: Request, response: Response, user: dict) -> str:
@@ -378,7 +366,7 @@ def login(body: LoginIn, request: Request, response: Response):
     if user is None:
         _record_fail(request, name)
         raise HTTPException(401, tr("Wrong name or password"))
-    _login_fails.pop((_client_ip(request), name.lower()), None)
+    loginguard.record_ok(_client_ip(request), name)
     return {"user": _public(user), "csrf": _start_session(request, response, user)}
 
 
@@ -1211,6 +1199,41 @@ def admin_streams_set(body: StreamsIn):
     streamguard.set_limit(body.max_streams)
     log.info("Parallel playback per account set to %s", body.max_streams)
     return _streams_state()
+class LoginGuardIn(BaseModel):
+    max_attempts: int = Field(ge=0, le=loginguard.MAX_ATTEMPTS)
+    block_minutes: int = Field(ge=1, le=loginguard.MAX_BLOCK_MINUTES)
+
+
+class UnblockIn(BaseModel):
+    ip: str | None = Field(default=None, max_length=64)  # without ip: lift every block
+    name: str = Field(default="", max_length=64)           # "" = the block of the whole IP
+
+
+def _login_guard_state() -> dict:
+    attempts, minutes = loginguard.settings()
+    return {"max_attempts": attempts, "block_minutes": minutes, "defaults": {"max_attempts": loginguard.DEFAULT_ATTEMPTS, "block_minutes": loginguard.DEFAULT_BLOCK_MINUTES},
+            "limits": {"max_attempts": loginguard.MAX_ATTEMPTS, "block_minutes": loginguard.MAX_BLOCK_MINUTES}, "blocks": loginguard.blocks()}
+
+
+@admin.get("/security")
+def admin_security():
+    """Login protection: how many failed logins are allowed, how long a block lasts, and the blocks running now."""
+    return _login_guard_state()
+
+
+@admin.put("/security")
+def admin_security_set(body: LoginGuardIn):
+    loginguard.set_settings(body.max_attempts, body.block_minutes)
+    log.info("Login protection set: %s attempts, %s minutes", body.max_attempts, body.block_minutes)
+    return _login_guard_state()
+
+
+@admin.post("/security/unblock")
+def admin_security_unblock(body: UnblockIn):
+    """Lifts a block (an IP, optionally only for one name), or all of them when no IP is given."""
+    n = loginguard.unblock(body.ip, body.name)
+    log.info("Login blocks lifted: %s", n)
+    return {**_login_guard_state(), "lifted": n}
 
 
 class ChannelIn(BaseModel):

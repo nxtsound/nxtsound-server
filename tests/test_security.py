@@ -126,11 +126,12 @@ def test_password_hash_format_and_rehash():
 
 def test_login_throttle_per_name_and_per_ip(anon):
     main.db.create_user("Chef", PW)
-    for _ in range(main.LOGIN_MAX_FAILS):
+    attempts = main.loginguard.settings()[0]
+    for _ in range(attempts):
         assert anon.post("/api/login", json={"name": "Chef", "password": "falsch-falsch"}).status_code == 401
     assert anon.post("/api/login", json={"name": "Chef", "password": PW}).status_code == 429
-    main._login_fails.clear()
-    for i in range(main.LOGIN_MAX_FAILS_IP):
+    main.loginguard.unblock()
+    for i in range(attempts * main.loginguard.IP_FACTOR):
         anon.post("/api/login", json={"name": f"x{i}", "password": "falsch-falsch"})
     assert anon.post("/api/login", json={"name": "Chef", "password": PW}).status_code == 429
 
