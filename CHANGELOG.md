@@ -5,6 +5,9 @@ minor versions may contain breaking changes, which are called out.
 
 ## [Unreleased]
 
+### Added
+- **Devices:** Account → Devices lists every browser and app you are logged in on (name, browser and system, when you logged in, when it was last used, IP address). Give a device a name, log a single device out, or log out everywhere else.
+
 ## [0.2.0] – 2026-10-21
 
 ### Added

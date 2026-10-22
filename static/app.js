@@ -123,6 +123,8 @@ const PATHS = {
   trash: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z',
   check: 'M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z',
   friends: 'M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z',
+  phone: 'M17 1.01 7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z',
+  computer: 'M21 2H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7l-2 3v1h8v-1l-2-3h7c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 12H3V4h18v10z',
   lists: 'M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z',
 };
 const SPIN = '<svg class="ic spinner" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="38 100"/></svg>';
@@ -791,6 +793,8 @@ async function viewAccount(my) {
     <button class="btn" type="submit" data-needs-name disabled>${esc(tr('Change name'))}</button></form></section>
     <section class="acard"><h3>${esc(tr('Language'))}</h3>
     <select id="langSel" class="langsel"><option value=""${user.lang ? '' : ' selected'}>${esc(tr('Automatic (browser)'))}</option><option value="en"${user.lang === 'en' ? ' selected' : ''}>English</option><option value="de"${user.lang === 'de' ? ' selected' : ''}>Deutsch</option></select></section>
+    <section class="acard"><h3>${esc(tr('Devices'))}</h3><div class="sub" style="margin:0 0 8px">${esc(tr('See where you are logged in and log out devices you no longer use.'))}</div>
+    <div class="actions" style="margin:0"><button class="btn sec" data-nav="#/account/devices">${esc(tr('Devices'))}</button></div></section>
     <section class="acard"><h3>${esc(tr('Change password'))}</h3>
     <form id="pwForm" autocomplete="on"><input type="text" name="username" value="${esc(user.name)}" autocomplete="username" hidden>
     <input name="old" type="password" placeholder="${esc(tr('Old password'))}" autocomplete="current-password" required>
@@ -799,6 +803,49 @@ async function viewAccount(my) {
     ${user.is_admin ? `<section class="acard"><h3>${esc(tr('Administration'))}</h3><div class="actions" style="margin:0"><button class="btn sec" data-nav="#/admin">${esc(tr('Admin area'))}</button></div></section>` : ''}
     <section class="acard"><h3>${esc(tr('Help'))}</h3><div class="actions" style="margin:0"><button class="btn sec" data-act="tour">${esc(tr('View introduction'))}</button><button class="btn sec" data-act="logout">${esc(tr('Log out'))}</button></div></section></div>`;
 }
+
+// ---------- Devices: the logins of this account ----------
+
+const deviceLabel = (d) => (d.browser && d.system ? tr('{browser} on {system}', { browser: d.browser, system: d.system }) : d.browser || d.system || tr('Unknown device'));
+
+async function viewDevices(my) {
+  setTab('');
+  const view = $('#view');
+  view.innerHTML = loading();
+  const { sessions } = await api('/me/sessions');
+  if (my !== S.nav) return;
+  const row = (d) => {
+    const icon = /iPhone|iPad|Android/.test(d.system) ? IC.phone : IC.computer;
+    const auto = deviceLabel(d);
+    const lines = [tr('Last active {when}', { when: ago(d.last_active) }), tr('Logged in {when}', { when: ago(d.created_at) })];
+    if (d.ip) lines.push(d.last_ip && d.last_ip !== d.ip ? tr('IP {ip} (last used from {last})', { ip: d.ip, last: d.last_ip }) : tr('IP {ip}', { ip: d.ip }));
+    return `<div class="dev${d.current ? ' me' : ''}"><div class="dev-ic">${icon}</div>
+      <div class="dev-body"><div class="dev-name">${esc(d.name || auto)}${d.current ? `<span class="dev-badge">${esc(tr('This device'))}</span>` : ''}</div>
+      ${d.name ? `<div class="dim small">${esc(auto)}</div>` : ''}<div class="dim small">${esc(lines.join(' · '))}</div></div>
+      <div class="dev-act"><button class="btn sec" data-act="devRename" data-id="${d.id}" data-name="${esc(d.name)}">${esc(tr('Rename'))}</button>${d.current ? '' : `<button class="btn sec" data-act="devEnd" data-id="${d.id}">${esc(tr('Log out'))}</button>`}</div></div>`;
+  };
+  view.innerHTML = `<div class="acct wide"><button class="back" data-nav="#/account">‹ ${esc(tr('Account'))}</button><h1>${esc(tr('Devices'))}</h1>
+    <div class="sub" style="margin:0 0 12px">${esc(tr('Every browser or app you are logged in on. A device you log out has to log in again.'))}</div>
+    <div class="devlist">${sessions.map(row).join('')}</div>
+    ${sessions.length > 1 ? `<div class="actions"><button class="btn sec" data-act="devEndOthers">${esc(tr('Log out all other devices'))}</button></div>` : ''}
+    <div class="dim small" style="margin-top:12px">${esc(tr('The server keeps the address of each login for this list until the login ends.'))}</div></div>`;
+}
+
+Object.assign(actions, {
+  devRename: async (n) => {
+    const name = await uiPrompt(tr('Name of this device'), n.dataset.name);
+    if (name === null) return;
+    try { await api('/me/sessions/' + n.dataset.id, { method: 'PATCH', json: { name: name.trim() } }); viewDevices(S.nav); } catch (e) { toast(e.message, 3000, true); }
+  },
+  devEnd: async (n) => {
+    if (!(await uiConfirm(tr('Log out this device?\n\nIt has to log in again.'), true))) return;
+    try { await api('/me/sessions/' + n.dataset.id, { method: 'DELETE' }); viewDevices(S.nav); } catch (e) { toast(e.message, 3000, true); }
+  },
+  devEndOthers: async () => {
+    if (!(await uiConfirm(tr('Log out all other devices?\n\nThey have to log in again.'), true))) return;
+    try { await api('/me/sessions', { method: 'DELETE' }); viewDevices(S.nav); } catch (e) { toast(e.message, 3000, true); }
+  },
+});
 
 const fmtHours = (s) => {
   if (s < 60) return tr('{n} sec', { n: Math.round(s) });
@@ -1622,7 +1669,7 @@ function route() {
     case 'auto': job = viewAuto(my, parts[1] || ''); break;
     case 'likes': job = viewLikes(my); break;
     case 'community': job = viewCommunity(my); break;
-    case 'account': job = parts[1] === 'recap' ? viewRecap(my, params) : viewAccount(my); break;
+    case 'account': job = parts[1] === 'recap' ? viewRecap(my, params) : parts[1] === 'devices' ? viewDevices(my) : viewAccount(my); break;
     case 'admin': job = viewAdmin(my, parts[1] || ''); break;
     case 'users': job = viewAdmin(my, 'users'); break;
     default: job = renderHome(my);

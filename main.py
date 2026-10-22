@@ -34,6 +34,7 @@ from pydantic import BaseModel, Field, field_validator
 import bpm as bpmlib
 import autolists
 import db
+import devices
 import enrich
 import i18n
 import logconf
@@ -245,7 +246,7 @@ def _set_session_cookie(request: Request, response: Response, token: str) -> Non
 
 def current_user(request: Request, response: Response) -> dict:
     token = request.cookies.get(SESSION_COOKIE)
-    user = db.user_for_token(token, SESSION_TTL, SESSION_MAX_AGE) if token else None
+    user = db.user_for_token(token, SESSION_TTL, SESSION_MAX_AGE, _client_ip(request)) if token else None
     if not user:
         raise HTTPException(401, tr("Not logged in"))
     if request.method not in SAFE_METHODS:  # CSRF protection: state-changing calls need the session's token in the header
@@ -299,7 +300,7 @@ def _record_fail(request: Request, name: str) -> None:
 
 
 def _start_session(request: Request, response: Response, user: dict) -> str:
-    token, csrf = db.create_session(user["id"])
+    token, csrf = db.create_session(user["id"], devices.short_agent(request.headers.get("user-agent", "")), _client_ip(request))
     _set_session_cookie(request, response, token)
     return csrf
 
@@ -388,6 +389,46 @@ def logout(request: Request, response: Response):
 @api.get("/me")
 def me(user: dict = Depends(current_user)):
     return {"user": _public(user), "csrf": user["csrf"]}
+
+
+# ---------- Devices: the user's own logins ----------
+
+class SessionNameIn(BaseModel):
+    name: str = Field(max_length=db.SESSION_NAME_MAX)
+
+
+@api.get("/me/sessions")
+def my_sessions(request: Request, user: dict = Depends(current_user)):
+    """The user's logins ("devices"): name, browser, system, IP at login and at last use, since when, last used. The current one is marked."""
+    out = []
+    for s in db.list_sessions(user["id"], request.cookies.get(SESSION_COOKIE, "")):
+        browser, system = devices.describe(s.pop("ua"))
+        out.append({**s, "browser": browser, "system": system})
+    return {"sessions": out}
+
+
+@api.patch("/me/sessions/{session_id}")
+def rename_my_session(session_id: int, body: SessionNameIn, user: dict = Depends(current_user)):
+    if not db.rename_session(user["id"], session_id, body.name):
+        raise HTTPException(404, tr("Device not found"))
+    return {"ok": True}
+
+
+@api.delete("/me/sessions/{session_id}")
+def end_my_session(session_id: int, request: Request, user: dict = Depends(current_user)):
+    """Logs another device out at once. The device asking uses the normal log out."""
+    result = db.end_session(user["id"], session_id, request.cookies.get(SESSION_COOKIE, ""))
+    if result == "missing":
+        raise HTTPException(404, tr("Device not found"))
+    if result == "current":
+        raise HTTPException(400, tr("This is the device you are using. Use Log out instead."))
+    return {"ok": True}
+
+
+@api.delete("/me/sessions")
+def end_my_other_sessions(request: Request, user: dict = Depends(current_user)):
+    """Logs out everywhere except on the device asking."""
+    return {"ended": db.end_other_sessions(user["id"], request.cookies.get(SESSION_COOKIE, ""))}
 
 
 class ListenIn(BaseModel):

@@ -207,6 +207,11 @@ active hours and days, and your listening streak. It is computed from your own h
 Open the round button at the top right: change your **name**, your **password**, the **language** (automatic, English or Deutsch) and see a summary
 of the last 30 days. Admins also find the admin area here.
 
+**Devices:** *Account → Devices* lists every browser and app you are logged in on, with the browser and system, when you logged in, when it was last used and
+from which IP address. You can give a device your own name, log a single device out (it has to log in again) or log out all other devices at once. Do this
+when you lose a phone or used a computer that is not yours. The server keeps the address of a login only for this list, until the login ends.
+Changing your password logs out every device.
+
 ## Admin area
 
 Only admins see it. It has four tabs.
@@ -347,7 +352,7 @@ Reaching the server's port directly always works for a test.
 | lrclib.net | song lyrics (only the song title, artist, album and length are sent) | `LYRICS=0` |
 | Plugins you install | whatever the plugin does (for example the radio plugin asks radio-browser.info) | do not install them |
 
-- Passwords are stored as salted hashes; sessions expire; the database only holds a hash of your session cookie.
+- Passwords are stored as salted hashes; sessions expire; the database only holds a hash of your session cookie. For each login it also keeps the browser name and the IP address (at login and at last use) so you can see your devices; they are deleted when the login ends and are not part of backups.
 - Logs never contain passwords, and failed logins are not logged with names.
 - Community sharing is opt-in per person.
 
