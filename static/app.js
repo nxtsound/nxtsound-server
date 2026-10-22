@@ -126,6 +126,7 @@ const PATHS = {
   phone: 'M17 1.01 7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z',
   computer: 'M21 2H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7l-2 3v1h8v-1l-2-3h7c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 12H3V4h18v10z',
   devices: 'M4 6h18V4H4c-1.1 0-2 .9-2 2v11H0v3h14v-3H4V6zm19 2h-6c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h6c.55 0 1-.45 1-1V9c0-.55-.45-1-1-1zm-1 9h-4v-7h4v7z',
+  keyboard: 'M20 5H4c-1.1 0-1.99.9-1.99 2L2 17c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-9 3h2v2h-2V8zm0 3h2v2h-2v-2zM8 8h2v2H8V8zm0 3h2v2H8v-2zm-1 2H5v-2h2v2zm0-3H5V8h2v2zm9 7H8v-2h8v2zm0-4h-2v-2h2v2zm0-3h-2V8h2v2zm3 3h-2v-2h2v2zm0-3h-2V8h2v2z',
   lists: 'M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z',
 };
 const SPIN = '<svg class="ic spinner" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="38 100"/></svg>';
@@ -2653,7 +2654,50 @@ $('#mProgWrap').addEventListener('click', (e) => {
   audio.currentTime = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * audio.duration;
 });
 
-// Keyboard shortcuts (desktop)
+// Keyboard shortcuts (desktop). The list in the window (the keyboard button at the top, or the key ?) is SHORTCUTS: keep both in step.
+// A key is a string, [a, b] for keys pressed together, {seq: [a, b]} for one after the other. "if" hides a line where the feature is missing.
+const SHORTCUTS = () => [
+  { title: tr('Playback'), items: [
+    { keys: ['Space', 'K'], label: tr('Play / pause') },
+    { keys: ['N', [tr('Shift'), '→']], label: tr('Next song') },
+    { keys: ['P', [tr('Shift'), '←']], label: tr('Previous song') },
+    { keys: ['→'], label: tr('Forward 10 seconds') },
+    { keys: ['←'], label: tr('Back 10 seconds') },
+    { keys: ['0 – 9'], label: tr('Jump to 0 to 90 % of the song') },
+    { keys: ['↑'], label: tr('Volume up') },
+    { keys: ['↓'], label: tr('Volume down') },
+    { keys: ['M'], label: tr('Mute') },
+    { keys: ['S'], label: tr('Shuffle') },
+    { keys: ['R'], label: tr('Repeat') },
+  ] },
+  { title: tr('The song'), items: [
+    { keys: ['L'], label: tr('Like the song') },
+    { keys: ['A'], label: tr('Add to a playlist') },
+    { keys: ['F'], label: tr('Big player') },
+    { keys: ['Q'], label: tr('Queue') },
+    { keys: ['D'], label: tr('Other devices'), if: typeof openDevices === 'function' },
+  ] },
+  { title: tr('Go to'), items: [
+    { keys: ['/'], label: tr('Search') },
+    { keys: [{ seq: ['G', 'H'] }], label: tr('Home') },
+    { keys: [{ seq: ['G', 'P'] }], label: tr('Playlists') },
+    { keys: [{ seq: ['G', 'L'] }], label: tr('Liked songs') },
+    { keys: [{ seq: ['G', 'C'] }], label: tr('Community') },
+  ] },
+  { title: tr('Help'), items: [
+    { keys: ['?'], label: tr('Show this list') },
+    { keys: ['Esc'], label: tr('Close window or player') },
+  ] },
+];
+
+function openShortcuts() {
+  const key = (k) => (Array.isArray(k) ? k.map((x) => `<kbd>${esc(x)}</kbd>`).join('+')
+    : k && k.seq ? k.seq.map((x) => `<kbd>${esc(x)}</kbd>`).join(` <span class="then">${esc(tr('then'))}</span> `) : `<kbd>${esc(k)}</kbd>`);
+  openSheet(`<div class="sh-title">${esc(tr('Keyboard shortcuts'))}</div><div class="kbd-groups">${SHORTCUTS().map((g) => `<section><h4>${esc(g.title)}</h4>${g.items.filter((i) => i.if !== false)
+    .map((i) => `<div class="kbd-row"><span>${esc(i.label)}</span><span class="kbd-keys">${i.keys.map(key).join(' <span class="then">/</span> ')}</span></div>`).join('')}</section>`).join('')}</div>
+    <div class="actions"><button class="btn" data-close>${esc(tr('Close'))}</button></div>`);
+}
+let keyPrefix = 0;
 document.addEventListener('keydown', (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const tag = (e.target.tagName || '').toLowerCase();
@@ -2661,18 +2705,34 @@ document.addEventListener('keydown', (e) => {
   if (!$('#app') || $('#app').hidden) return;
   const k = e.key;
   const seek = (s) => { if (audio.duration) audio.currentTime = Math.min(audio.duration, Math.max(0, audio.currentTime + s)); };
-  if (k === ' ' || k === 'k') { e.preventDefault(); togglePlay(); }
-  else if (k === 'ArrowRight' && e.shiftKey || k === 'n') next();
-  else if (k === 'ArrowLeft' && e.shiftKey || k === 'p') prev();
+  if (keyPrefix && Date.now() - keyPrefix < 1200) {  // "g" then a letter: go to a page
+    keyPrefix = 0;
+    const to = { h: '#/home', p: '#/playlists', l: '#/likes', c: '#/community' }[k.toLowerCase()];
+    if (to) { e.preventDefault(); go(to); return; }
+  }
+  const lower = k.length === 1 ? k.toLowerCase() : k;
+  if (k === ' ' || lower === 'k') { e.preventDefault(); togglePlay(); }
+  else if (k === 'ArrowRight' && e.shiftKey || lower === 'n') next();
+  else if (k === 'ArrowLeft' && e.shiftKey || lower === 'p') prev();
   else if (k === 'ArrowRight') { e.preventDefault(); seek(10); }
   else if (k === 'ArrowLeft') { e.preventDefault(); seek(-10); }
   else if (k === 'ArrowUp') { e.preventDefault(); S.setVol(Math.min(1, +(audio.volume + 0.05).toFixed(2))); }
   else if (k === 'ArrowDown') { e.preventDefault(); S.setVol(Math.max(0, +(audio.volume - 0.05).toFixed(2))); }
-  else if (k === 'm') $('#mMute').click();
-  else if (k === 'l') toggleLike(currentTrack());
+  else if (/^[0-9]$/.test(k)) { if (audio.duration) audio.currentTime = audio.duration * (+k / 10); }
+  else if (lower === 'm') $('#mMute').click();
+  else if (lower === 's') toggleShuffle();
+  else if (lower === 'r') cycleRepeat();
+  else if (lower === 'l') toggleLike(currentTrack());
+  else if (lower === 'a') { const t = currentTrack(); if (t) openPlaylistPicker([t]); }
+  else if (lower === 'f') { if ($('#full').classList.contains('open')) closeFull(); else openFull(); }
+  else if (lower === 'q') { if (!currentTrack()) return; openFull(); if ($('#qPanel').classList.contains('open')) closeQueue(); else openQueue(); }
+  else if (lower === 'd') { if (typeof openDevices === 'function') openDevices(); }
+  else if (lower === 'g') keyPrefix = Date.now();
   else if (k === '/') { e.preventDefault(); $('#searchOpen').click(); }
+  else if (k === '?') { e.preventDefault(); openShortcuts(); }
   else if (k === 'Escape') { if (!$('#sheet').hidden) closeSheet(); else if ($('#qPanel').classList.contains('open')) closeQueue(); else closeFull(); }
 });
+$('#keysBtn').onclick = openShortcuts;
 $('#fNext').onclick = next;
 $('#fPrev').onclick = prev;
 $('#mOpen').onclick = openFull;
@@ -2732,12 +2792,6 @@ $('#qRest').onclick = clearRestOfQueue;
   list.addEventListener('pointercancel', end);
 })();
 $('#fAdd').innerHTML = IC.plus + `<span>${esc(tr('Playlist'))}</span>`;
-document.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
-  if (!$('#sheet').hidden) closeSheet();
-  else if ($('#qPanel').classList.contains('open')) closeQueue();
-  else closeFull();
-});
 
 // Remember the position of long tracks (DJ sets) and resume next time
 function savePos() {
