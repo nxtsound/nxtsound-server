@@ -1,5 +1,59 @@
 [
   {
+    "version": "0.3.0",
+    "title": "What's new",
+    "items": [
+      {
+        "title": "Arrange your home page",
+        "text": "Tap “Customize home” at the bottom of the home page: choose the sections, their order and options. New sections: Rediscover, top songs, genres, decades, artist mixes, your playlists, a year ago and more.",
+        "title_de": "Gestalte deine Startseite",
+        "text_de": "Tippe unten auf der Startseite auf „Startseite anpassen“: Wähle die Bereiche, ihre Reihenfolge und Optionen. Neu: Wiederentdecken, Top-Songs, Genres, Jahrzehnte, Künstler-Mixe, deine Playlists, vor einem Jahr und mehr."
+      },
+      {
+        "title": "Control your other devices",
+        "text": "The new devices button shows what plays on your other devices and lets you pause, skip, jump and change the volume. A green dot tells you when another device is playing.",
+        "title_de": "Steuere deine anderen Geräte",
+        "text_de": "Der neue Geräte-Knopf zeigt, was auf deinen anderen Geräten läuft, und lässt dich pausieren, überspringen, springen und die Lautstärke ändern. Ein grüner Punkt zeigt, wenn ein anderes Gerät spielt."
+      },
+      {
+        "title": "Your devices",
+        "text": "Under Account → Devices you see where you are logged in, can name your devices and log out the ones you no longer use.",
+        "title_de": "Deine Geräte",
+        "text_de": "Unter Konto → Geräte siehst du, wo du angemeldet bist, kannst deine Geräte benennen und die abmelden, die du nicht mehr nutzt."
+      },
+      {
+        "title": "Login alerts",
+        "text": "When your account is logged in from a device or network you have not used before, a message appears in the bell.",
+        "title_de": "Anmelde-Warnungen",
+        "text_de": "Wird dein Konto von einem Gerät oder Netz angemeldet, das du noch nicht benutzt hast, erscheint eine Nachricht in der Glocke."
+      },
+      {
+        "title": "Crossfade",
+        "text": "In the DJ menu, “Crossfade” blends one song into the next, with a length you choose. Songs that cannot be matched on the beat are crossfaded too.",
+        "title_de": "Überblenden",
+        "text_de": "Im DJ-Menü blendet „Überblenden“ einen Song in den nächsten, mit einer Länge nach Wahl. Auch Songs, die sich nicht im Takt mischen lassen, werden überblendet."
+      },
+      {
+        "title": "Keyboard shortcuts",
+        "text": "Press ? or tap the keyboard button at the top to see all shortcuts, now including shuffle, repeat, queue, jumping within a song and G then H, P, L or C to go to a page.",
+        "title_de": "Tastenkürzel",
+        "text_de": "Drücke ? oder tippe oben auf den Tastatur-Knopf, um alle Kürzel zu sehen, jetzt auch für Mischen, Wiederholen, Warteschlange, Springen im Song und G dann H, P, L oder C für eine Seite."
+      },
+      {
+        "title": "For admins: backups to other places",
+        "text": "Admin area → System can send backups to a folder (also NFS), S3, Nextcloud or ownCloud, FTP or SFTP, by hand or on a schedule, and restore from them.",
+        "title_de": "Für Admins: Backups an andere Orte",
+        "text_de": "Der Admin-Bereich → System kann Backups in einen Ordner (auch NFS), zu S3, Nextcloud oder ownCloud, FTP oder SFTP schicken, von Hand oder nach Zeitplan, und daraus wiederherstellen."
+      },
+      {
+        "title": "For admins: safer logins and a play limit",
+        "text": "Set how many wrong passwords an address may try before it is blocked, turn login alerts on or off, and limit how many streams one account may play at the same time.",
+        "title_de": "Für Admins: sicherere Anmeldung und Limit",
+        "text_de": "Lege fest, wie viele falsche Passwörter eine Adresse versuchen darf, bevor sie gesperrt wird, schalte Anmelde-Warnungen an oder aus und begrenze, wie viele Streams ein Konto gleichzeitig spielen darf."
+      }
+    ]
+  },
+  {
     "version": "0.1.0",
     "title": "What's new",
     "items": [
