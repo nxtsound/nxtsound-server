@@ -96,6 +96,13 @@ def test_folder_cover_is_used(alice, lib):
     assert epsilon["thumb"].startswith("/api/cover/") and alice.get(epsilon["thumb"]).status_code == 200
 
 
+def test_a_picture_named_like_the_song_is_its_cover(alice, lib):
+    (lib / "b" / "z" / "01.webp").write_bytes(PNG)  # next to 01.wav
+    main.library.scan(full=True)
+    item = alice.get("/api/search", params={"q": "Epsilon"}).json()["items"][0]
+    assert item["thumb"].startswith("/api/cover/") and alice.get(item["thumb"]).status_code == 200
+
+
 def test_radio_prefers_same_artist_and_never_contains_seed(alice, lib, monkeypatch):
     monkeypatch.setattr(main.library.random, "random", lambda: 0.0)  # without dice, otherwise Epsilon occasionally ends up before Delta
     ids = ids_by_title(alice)

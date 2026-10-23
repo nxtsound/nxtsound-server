@@ -112,6 +112,15 @@ def _embedded_cover(path: Path) -> tuple[bytes, str] | None:
     return None
 
 
+def _sidecar_cover(path: Path) -> Path | None:
+    """A picture named like the song (`Title.m4a` next to `Title.jpg`)."""
+    for ext in COVER_EXT:
+        p = path.with_suffix(ext)
+        if p.is_file():
+            return p
+    return None
+
+
 def _folder_cover(folder: Path) -> Path | None:
     try:
         files = {p.name.lower(): p for p in folder.iterdir() if p.is_file()}
@@ -252,7 +261,7 @@ def read_file(path: Path, rel: str) -> dict:
     if emb and emb[0]:
         cover = _store_cover(*emb)
     else:
-        fc = _folder_cover(path.parent)
+        fc = _sidecar_cover(path) or _folder_cover(path.parent)
         if fc:
             try:
                 cover = _store_cover(fc.read_bytes(), "image/png" if fc.suffix == ".png" else "image/jpeg")
