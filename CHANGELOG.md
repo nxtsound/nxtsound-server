@@ -5,6 +5,10 @@ minor versions may contain breaking changes, which are called out.
 
 ## [Unreleased]
 
+### Fixed
+- The devices window stayed empty (the green dot showed, but no device was listed).
+- A picture named like the song (`Title.jpg` next to `Title.m4a`) is used as its cover. Songs that a plugin keeps in the library can bring their cover this way.
+
 ## [0.3.0] – 2026-10-23
 
 ### Added

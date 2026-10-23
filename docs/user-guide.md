@@ -134,7 +134,7 @@ When they do not, the server reads them from folder and file names, and the two 
 Good to know:
 
 - A leading number only counts as a track number with a separator (`01 - `, `1-05 `, `03. `) or a leading zero. "99 Luftballons" stays a title.
-- **Covers**: embedded pictures are used first, then an image in the album folder named `cover`, `folder`, `front`, `album` or `albumart`.
+- **Covers**: embedded pictures are used first, then a picture named like the song (`Title.jpg` next to `Title.m4a`), then an image in the album folder named `cover`, `folder`, `front`, `album` or `albumart`.
 - If you rename files or folders, the server sees new files (new IDs). Playlists and likes of the old names are lost, so decide on a layout early.
 - New and changed files are found at startup and with every scan. Set `SCAN_MINUTES=15` to scan every 15 minutes, or use
   Admin area → System → **Scan now** (and "Re-read everything" after you changed tags or covers on existing files).
