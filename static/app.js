@@ -1095,17 +1095,32 @@ function pluginUpdateSheet(id, u) {
   };
 }
 
+// Release notes are Markdown: headings (#), lists (-), **bold**, *italic*, `code`. Everything is escaped first, so no markup gets through.
+function mdNotes(text) {
+  const inline = (t) => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/\*([^*\s][^*]*)\*/g, '<i>$1</i>');
+  let html = '', list = false;
+  for (const line of String(text).split(/\r?\n/)) {
+    const li = line.match(/^\s*[-*]\s+(.*)/), h = line.match(/^#{1,6}\s+(.*)/);
+    if (list && !li) { html += '</ul>'; list = false; }
+    if (li) { if (!list) { html += '<ul>'; list = true; } html += `<li>${inline(li[1])}</li>`; }
+    else if (h) html += `<h5>${inline(h[1])}</h5>`;
+    else if (line.trim()) html += `<p>${inline(line)}</p>`;
+  }
+  return html + (list ? '</ul>' : '');
+}
+
 function serverUpdateSheet(s) {
   const tag = 'v' + s.latest;
   openSheet(`<div class="sh-title">${esc(s.prerelease ? tr('Beta available: {version}', { version: s.latest }) : tr('Server update available: {version}', { version: s.latest }))}</div>
     <div class="upd-info"><div class="dim small">${esc(tr('This server runs {current}.', { current: s.current }))}</div>
     <h4>${esc(tr('Release notes'))}</h4>
-    ${s.notes ? `<pre class="notes">${esc(s.notes)}</pre>` : `<div class="dim small">${esc(tr('No release notes.'))}</div>`}
+    ${s.notes ? `<div class="notes md">${mdNotes(s.notes)}</div>` : `<div class="dim small">${esc(tr('No release notes.'))}</div>`}
     <h4>${esc(tr('How to update'))}</h4>
     <div class="dim small">${esc(tr('With the ready-made image'))}</div>
     <pre class="cmdbox">docker compose pull\ndocker compose up -d</pre>
     <div class="dim small">${esc(tr('Built from the source'))}</div>
     <pre class="cmdbox">git fetch --tags\ngit checkout ${esc(tag)}\ndocker compose up -d --build</pre>
+    <p class="dim small" style="margin:6px 0 0">${esc(tr('To switch between beta and stable, change the image tag in your docker-compose.yml: :beta for pre-releases, :latest for stable versions (or a fixed version such as :{version}).', { version: s.latest.replace(/-.*/, '') }))}</p>
     <p class="dim small" style="margin:6px 0 0">${esc(s.prerelease ? tr('This is a pre-release for testing. With the image, use the tag :beta (ghcr.io/nxtsound/nxtsound-server:beta).') : tr('The checkout gives you exactly the released version; “git pull” alone would give you the newest development state, which can be ahead of the release.'))}</p></div>
     <div class="actions">${s.url ? `<a class="btn" href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(tr('Open the release page'))}</a>` : ''}<button class="btn sec" data-close>${esc(tr('Close'))}</button></div>`);
 }
