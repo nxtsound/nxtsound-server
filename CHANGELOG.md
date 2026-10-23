@@ -5,6 +5,8 @@ minor versions may contain breaking changes, which are called out.
 
 ## [Unreleased]
 
+## [0.3.1] – 2026-10-23
+
 ### Fixed
 - The devices window stayed empty (the green dot showed, but no device was listed).
 - The frame lines above and below *Your Mix* are gone on the phone.
