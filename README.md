@@ -1,10 +1,11 @@
 # NxtSound
 
-NxtSound is a music server you run yourself. Point it at a folder of music files and you get a web app, installable on your phone, with search,
+NxtSound is like a music streaming service you run selfhosted for you and your friends.
+Point it at a folder of music files and you get a web app, installable on your phone, with search,
 playlists, lyrics, radio from any song and a listening recap. It is one Docker container (Python and SQLite). Other sources, such as internet radio
 or your Nextcloud, connect as [plugins](#plugins).
 
-It is a hobby project and still young (alpha): expect rough edges, and have a look at the [roadmap](#roadmap) before you rely on it.
+The project and still young (alpha): expect rough edges, and have a look at the [roadmap](#roadmap) before you rely on it.
 
 <img src="docs/screenshots/home.png" alt="The home page" width="720">
 
