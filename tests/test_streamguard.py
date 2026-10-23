@@ -47,7 +47,7 @@ def test_a_limit_of_one_has_its_own_wording(alice):
     _limit(alice, 1)
     a, b = _login(), _login()
     assert _claim(a, "player-aaaa").status_code == 200
-    assert "one stream" in _claim(b, "player-bbbb").json()["detail"]
+    assert "too many devices" in _claim(b, "player-bbbb").json()["detail"]
 
 
 def test_claiming_twice_from_the_same_player_counts_once(alice):
