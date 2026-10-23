@@ -3,8 +3,6 @@
 All notable changes are listed here. The project follows [semantic versioning](https://semver.org); while the version starts with `0.`,
 minor versions may contain breaking changes, which are called out.
 
-## [Unreleased]
-
 ## [0.3.1] – 2026-10-23
 
 ### Fixed
