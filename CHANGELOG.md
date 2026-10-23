@@ -5,6 +5,8 @@ minor versions may contain breaking changes, which are called out.
 
 ## [Unreleased]
 
+## [0.3.0] – 2026-10-23
+
 ### Added
 - **Remote control:** the new *Devices* button (in the header, the player bar and the big player) lists the other devices of your account that have something loaded and steers them: play and pause, next and previous, jump to a position, volume. A green dot on the header button pulses while another device is playing and appears or disappears by itself as soon as a stream starts or ends (no reload). Playing something on the device in your hand does not stop the other one.
 - **Login alerts:** when an account is logged in from a device (browser and system) or a network (address group) the user has not used before, they get a message in their bell that links to *Account → Devices*. The very first login of a user raises nothing. Admin area → System → Login alerts turns it off (`LOGIN_ALERTS`).

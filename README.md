@@ -92,13 +92,15 @@ more and never disappear. But a plain folder has none of the convenience: no goo
 - 🎵 **Your library**, even messy: tags, covers, and artist/album/track read from folder and file names
 - 🔎 **Instant search**, artist and album pages
 - ▶️ **A full player**: queue, shuffle, repeat, synced lyrics, resume where you left off
-- 📃 **Playlists and likes**, and a home page that learns what you like (your mix, rediscover, genres, decades)
+- 📃 **Playlists and likes**, and a **home page you arrange yourself** that learns what you like (your mix, rediscover, top songs, genres, decades, ...)
 - 👥 **Multiple users** with an admin area, backup and restore
+- 🔐 **Safer accounts**: a list of your devices with log-out, alerts for logins from a new device, protection against password guessing, a limit for playing on many devices at once
+- ⌨️ **Keyboard shortcuts** (press `?` for the list)
 - 📱 **Installable web app**, English and German
 
 **Alpha** (works, but young: details may change)
 
-🎚 DJ mode · 📊 Recap · 🧩 Plugins · 🌐 Metadata from MusicBrainz · 🔔 Notifications and update notices · 🤝 Community (opt-in) · 🍏 iOS app (in development)
+🎚 DJ mode with crossfade · 📲 Remote control of your other devices · 💾 Backups to NFS, S3, Nextcloud, FTP and SFTP · 📊 Recap · 🧩 Plugins · 🌐 Metadata from MusicBrainz · 🔔 Notifications and update notices · 🤝 Community (opt-in) · 🍏 iOS app (in development)
 
 <table>
   <tr>
