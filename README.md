@@ -1,23 +1,16 @@
-<div align="center">
-
-<img src="static/icon.svg" alt="NxtSound logo" width="110">
-
 # NxtSound
 
-**Your music. Your server. No subscription, no tracking.**
+NxtSound is a music server you run yourself. Point it at a folder of music files and you get a web app, installable on your phone, with search,
+playlists, lyrics, radio from any song and a listening recap. It is one Docker container (Python and SQLite). Other sources, such as internet radio
+or your Nextcloud, connect as [plugins](#plugins).
 
-A self-hosted music server with a fast web app, smart recommendations and a plugin system.
-Point it at a folder of music files and it feels like a streaming service that belongs to you.
+It is a hobby project and still young (alpha): expect rough edges, and have a look at the [roadmap](#roadmap) before you rely on it.
+
+<img src="docs/screenshots/home.png" alt="The home page" width="720">
 
 [![CI](https://github.com/nxtsound/nxtsound-server/actions/workflows/ci.yml/badge.svg)](https://github.com/nxtsound/nxtsound-server/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Status: alpha](https://img.shields.io/badge/status-alpha-orange)
-
-<img src="docs/screenshots/home.png" alt="Home page" width="55%">
-
-[Quick start](#quick-start) · [Why](#why-nxtsound) · [Features](#features) · [Plugins](#plugins) · [Roadmap](#roadmap) · [Support](#support-the-project) · [Contribute](#contributing) · [Docs](#documentation)
-
-</div>
 
 ## Quick start
 
@@ -72,10 +65,10 @@ docker compose up -d --build
 Reaching it from outside your home? Put a reverse proxy with HTTPS in front: [Running it on the internet](docs/user-guide.md#running-it-on-the-internet).
 Everything else (adding music, every feature, updating, backups, troubleshooting) is in the [user guide](docs/user-guide.md).
 
-## Why NxtSound?
+## What it is for
 
-Streaming subscriptions charge you every month, and what you can listen to depends on licenses that can change tomorrow. Music files you own cost nothing
-more and never disappear. But a plain folder has none of the convenience: no good search, no recommendations, no phone app. NxtSound closes that gap.
+Music you own as files is simple and stays yours, but a plain folder has no good search, no recommendations and no phone app.
+NxtSound adds those on top of your files.
 
 - **You own everything.** Files stay in your folder, history stays in a small database on your server. Nothing is sent anywhere
   (the few optional internet lookups are listed in the [privacy notes](docs/user-guide.md#privacy) and can be switched off).
