@@ -1493,8 +1493,8 @@ async function adminSystem() {
 
 async function viewAdmin(my, sub = '') {
   setTab('admin');
-  const view = $('#view');
-  view.innerHTML = loading();
+  const view = $('#view'), top = S.keepTop;
+  if (!top) view.innerHTML = loading();  // on a refresh the old page stays until the new one is ready
   if (!S.user || !S.user.is_admin) { view.innerHTML = errorBox(tr('Admins only.')); return; }
   if (!['', 'users', 'plugins', 'system'].includes(sub)) sub = '';
   const body = await (sub === 'users' ? adminUsers() : sub === 'plugins' ? adminPlugins() : sub === 'system' ? adminSystem() : adminOverview());
@@ -1502,6 +1502,7 @@ async function viewAdmin(my, sub = '') {
   view.innerHTML = `<div class="acct wide">
     <div class="acct-head"><div><h1>${esc(tr('Admin area'))}</h1></div></div>
     ${adminTabs(sub)}${body}</div>`;
+  view.scrollTop = top;
   if (sub === 'plugins' && view.querySelector('[data-plugin-busy="1"]')) setTimeout(() => pollBusyPlugins(my), 3000);  // a plugin is being set up
 }
 
@@ -1963,7 +1964,11 @@ function route() {
   const params = new URLSearchParams(qs || '');
   const isSearch = parts[0] === 'search';
   if (!isSearch) { setHeaders(false); hideSuggest(); }
-  $('#view').scrollTop = 0;
+  // A refresh of the admin page (a backup or plugin changed its state) keeps the place on the page; any other page starts at the top.
+  const refresh = parts[0] === 'admin' && location.hash === S.lastHash;
+  S.keepTop = refresh ? $('#view').scrollTop : 0;
+  S.lastHash = location.hash;
+  if (!refresh) $('#view').scrollTop = 0;
   let job;
   switch (parts[0]) {
     case 'search': job = viewSearch(my, params); break;
