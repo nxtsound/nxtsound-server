@@ -10,6 +10,7 @@ minor versions may contain breaking changes, which are called out.
 - The frame lines above and below *Your Mix* are gone on the phone.
 - The update window shows the release notes formatted (headings, lists, bold) and tells you to change the image tag in the compose file to switch between beta and stable.
 - The admin page no longer jumps to the top when something on it updates (backup state, plugin state).
+- The explanations on Admin area → System are folded away; the “?” next to a card title shows them.
 - A picture named like the song (`Title.jpg` next to `Title.m4a`) is used as its cover. Songs that a plugin keeps in the library can bring their cover this way.
 
 ## [0.3.0] – 2026-10-23

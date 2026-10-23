@@ -1260,7 +1260,7 @@ function streamsCard(st) {
       <button class="btn sec" type="submit">${esc(tr('Save'))}</button></form>
     <h4>${esc(tr('Playing now'))}</h4>
     ${rows || `<div class="sub" style="margin:0">${esc(tr('Nobody is playing.'))}</div>`}
-    <p class="dim small" style="margin:10px 0 0">${esc(tr('Every player that plays (a browser tab, an app) uses one place of its account, even several in the same login. When the limit is reached, a further player of the account is told so and does not start; the others play on. Pausing or closing the tab frees the place. MAX_STREAMS_PER_USER sets the default.'))}</p></section>`;
+    <p class="dim small hint" style="margin:10px 0 0">${esc(tr('Every player that plays (a browser tab, an app) uses one place of its account, even several in the same login. When the limit is reached, a further player of the account is told so and does not start; the others play on. Pausing or closing the tab frees the place. MAX_STREAMS_PER_USER sets the default.'))}</p></section>`;
 }
 
 // Login protection: how many failed logins are allowed, how long a block lasts, and the blocks running now.
@@ -1276,7 +1276,7 @@ function securityCard(sec) {
     <h4>${esc(tr('Blocked now'))}</h4>
     ${rows || `<div class="sub" style="margin:0">${esc(tr('Nobody is blocked.'))}</div>`}
     ${sec.blocks.length ? `<div class="actions" style="margin:10px 0 0"><button class="btn sec" data-act="secUnblockAll">${esc(tr('Lift all blocks'))}</button></div>` : ''}
-    <p class="dim small" style="margin:10px 0 0">${esc(tr('After this many failed logins from one address for one name (four times as many across all names) the address is blocked for the time set here. A restart does not lift a block. LOGIN_MAX_ATTEMPTS and LOGIN_BLOCK_MINUTES set the defaults.'))}</p></section>`;
+    <p class="dim small hint" style="margin:10px 0 0">${esc(tr('After this many failed logins from one address for one name (four times as many across all names) the address is blocked for the time set here. A restart does not lift a block. LOGIN_MAX_ATTEMPTS and LOGIN_BLOCK_MINUTES set the defaults.'))}</p></section>`;
 }
 
 Object.assign(actions, {
@@ -1300,7 +1300,7 @@ function updatesCard(up) {
     <div class="sub" style="margin:0 0 8px">${esc(tr('Server'))} <b>${esc(s.current)}</b> ${state}</div>
     <div class="sub" style="margin:0 0 4px"><label for="updChannel">${esc(tr('Updates from'))}</label>
       <select id="updChannel" class="langsel"><option value="stable"${s.channel === 'stable' ? ' selected' : ''}>${esc(tr('Stable'))}</option><option value="beta"${s.channel === 'beta' ? ' selected' : ''}>${esc(tr('Beta'))}</option></select></div>
-    <p class="dim small" style="margin:0 0 8px">${esc(tr('Stable: tested releases (recommended). Beta: also test versions, before they are released as stable.'))}</p>
+    <p class="dim small hint" style="margin:0 0 8px">${esc(tr('Stable: tested releases (recommended). Beta: also test versions, before they are released as stable.'))}</p>
     <p class="dim small" style="margin:0">${s.checked ? esc(tr('Last checked {when}', { when: ago(s.checked) })) + ' · ' : ''}${up.check_hours ? esc(tr('The server looks every {n} h.', { n: up.check_hours })) : esc(tr('Automatic checks are off (UPDATE_CHECK_HOURS=0).'))}
     ${s.error ? ' · ' + esc(tr('Last attempt failed: {why}', { why: s.error })) : ''}</p></section>`;
 }
@@ -1320,10 +1320,10 @@ function backupsCard(bk) {
       <button class="btn sec" data-act="bkFiles" data-id="${esc(t.id)}">${esc(tr('Backups'))}</button><button class="btn sec" data-act="bkEdit" data-id="${esc(t.id)}">${esc(tr('Edit'))}</button></div></div>`;
   };
   return `<section class="acard"><h3>${esc(tr('Backups to other places'))} <span class="nsys">Experimental</span>  </h3>
-    <p class="dim small" style="margin:0 0 10px">${esc(tr('Copies of the database (users, playlists, history, settings) go to a folder, S3, Nextcloud or ownCloud, FTP or SFTP, by hand or on a schedule. The music files are not part of it.'))}</p>
+    <p class="dim small hint" style="margin:0 0 10px">${esc(tr('Copies of the database (users, playlists, history, settings) go to a folder, S3, Nextcloud or ownCloud, FTP or SFTP, by hand or on a schedule. The music files are not part of it.'))}</p>
     ${bk.targets.map(row).join('') || `<div class="sub" style="margin:0 0 8px">${esc(tr('No destination yet.'))}</div>`}
     <div class="actions" style="margin:10px 0 0"><button class="btn sec" data-act="bkAdd"${bk.targets.length >= bk.max_targets ? ' disabled' : ''}>+ ${esc(tr('Add a destination'))}</button></div>
-    <p class="dim small" style="margin:10px 0 0">${esc(tr('A backup contains password hashes and the settings of your plugins and destinations. Keep it where only you can read it.'))}</p></section>`;
+    <p class="dim small hint" style="margin:10px 0 0">${esc(tr('A backup contains password hashes and the settings of your plugins and destinations. Keep it where only you can read it.'))}</p></section>`;
 }
 
 const BK = { data: null, poll: 0 };
@@ -1464,32 +1464,52 @@ async function adminSystem() {
     <div class="sub" style="padding:0 0 8px">${esc(trn(lib.tracks, '{n} track in', '{n} tracks in'))} <code>${esc(lib.music_dir)}</code> · ${fmtBytes(lib.bytes)}</div>
     <div class="sub" style="padding:0">${state}</div>
     <div class="actions" style="margin:12px 0 0"><button class="btn sec" data-act="scanLibrary"${sc.running ? ' disabled' : ''}>${esc(tr('Scan now'))}</button><button class="btn sec" data-act="scanLibrary" data-full="1"${sc.running ? ' disabled' : ''}>${esc(tr('Re-read everything'))}</button></div>
-    <p class="dim small" style="margin:10px 0 0">${esc(tr('New and changed files are detected at startup and after every scan. “Re-read everything” also re-reads unchanged files (e.g. after re-tagging covers).'))}</p></section>
+    <p class="dim small hint" style="margin:10px 0 0">${esc(tr('New and changed files are detected at startup and after every scan. “Re-read everything” also re-reads unchanged files (e.g. after re-tagging covers).'))}</p></section>
     <section class="acard"><h3>${esc(tr('Information from the internet'))}</h3>
     <div class="sub" style="padding:0 0 8px">${esc(enState)} · ${esc(tr('found: {a} artists, {b} albums', { a: fmtInt(en.artists_found), b: fmtInt(en.albums_found) }))} · ${esc(tr('without match: {n}', { n: fmtInt(en.artists_missed + en.albums_missed) }))}</div>
     <div class="actions" style="margin:0"><button class="btn sec" data-act="enrichToggle" data-on="${en.enabled ? '' : '1'}">${esc(en.enabled ? tr('Turn off') : tr('Turn on'))}</button><button class="btn sec" data-act="enrichRun"${en.enabled && !en.running ? '' : ' disabled'}>${esc(tr('Look up now'))}</button></div>
-    <p class="dim small" style="margin:10px 0 0">${esc(tr('Fills in missing release year, cover and a short description from {source}. Only artist and album names are sent. Existing tags and covers stay unchanged.', { source: en.source }))}${en.from_admin ? '' : ' ' + esc(tr('Default from the environment variable')) + ' <code>ENRICH</code>.'}</p></section>
+    <p class="dim small hint" style="margin:10px 0 0">${esc(tr('Fills in missing release year, cover and a short description from {source}. Only artist and album names are sent. Existing tags and covers stay unchanged.', { source: en.source }))}${en.from_admin ? '' : ' ' + esc(tr('Default from the environment variable')) + ' <code>ENRICH</code>.'}</p></section>
     ${updatesCard(up)}
     <section class="acard"><h3>${esc(tr('Login alerts'))}</h3>
     <div class="sub" style="margin:0 0 8px">${esc(la.enabled ? tr('On') : tr('Off'))}</div>
     <div class="actions" style="margin:0"><button class="btn sec" data-act="loginAlertsToggle" data-on="${la.enabled ? '' : '1'}">${esc(la.enabled ? tr('Turn off') : tr('Turn on'))}</button></div>
-    <p class="dim small" style="margin:10px 0 0">${esc(tr('A user gets a message in their bell when their account is logged in from a device or a network (address group) they have not used before. The first login of a user raises nothing. LOGIN_ALERTS sets the default.'))}</p></section>
+    <p class="dim small hint" style="margin:10px 0 0">${esc(tr('A user gets a message in their bell when their account is logged in from a device or a network (address group) they have not used before. The first login of a user raises nothing. LOGIN_ALERTS sets the default.'))}</p></section>
     ${streamsCard(str)}
     ${securityCard(sec)}
     <section class="acard"><h3>${esc(tr('Community'))}</h3>
     <div class="sub" style="margin:0 0 8px">${esc(com.enabled ? tr('On') : tr('Off'))}${com.enabled ? ' · ' + esc(tr('{n} of {total} users share what they listen to', { n: com.sharing, total: com.users })) : ''}</div>
     <div class="actions" style="margin:0"><button class="btn sec" data-act="communityToggle" data-on="${com.enabled ? '' : '1'}">${esc(com.enabled ? tr('Turn off') : tr('Turn on'))}</button></div>
-    <p class="dim small" style="margin:10px 0 0">${esc(tr('Users can follow each other and, if they choose to share, see what their friends listen to on the home page. Nothing is shared unless a user switches it on.'))}</p></section>
+    <p class="dim small hint" style="margin:10px 0 0">${esc(tr('Users can follow each other and, if they choose to share, see what their friends listen to on the home page. Nothing is shared unless a user switches it on.'))}</p></section>
     <section class="acard"><h3>${esc(tr('Logging'))}</h3>
     ${lg.categories.map((c) => `<div class="logrow"><span>${esc(c.label)}</span><span class="logctl"><select data-logcat="${esc(c.id)}">${lg.levels.map((l) => `<option value="${l}"${l === c.level ? ' selected' : ''}>${esc(logLevelLabel(l))}</option>`).join('')}</select><small class="dim">${esc(c.source === 'admin' ? tr('Set in the admin area') : c.source === 'env' ? tr('From environment variable') : tr('Default'))}</small>${c.source === 'admin' ? `<button class="chip" data-act="logReset" data-cat="${esc(c.id)}">${esc(tr('Reset'))}</button>` : ''}</span></div>`).join('')}
     <div class="actions" style="margin:12px 0 0"><button class="btn sec" data-act="logShow">${esc(tr('Show recent messages'))}</button></div>
     <pre id="logView" class="dim small" style="white-space:pre-wrap;margin:10px 0 0;max-height:18em;overflow:auto" hidden></pre>
-    <p class="dim small" style="margin:10px 0 0">${esc(tr('Choose what the server logs. Changes apply at once; the environment variables LOG_LEVEL and LOG_LEVEL_<CATEGORY> set the defaults.'))}</p></section>
+    <p class="dim small hint" style="margin:10px 0 0">${esc(tr('Choose what the server logs. Changes apply at once; the environment variables LOG_LEVEL and LOG_LEVEL_<CATEGORY> set the defaults.'))}</p></section>
     ${backupsCard(BK.data)}
     <section class="acard"><h3>${esc(tr('Backup'))}</h3>
     <div class="actions" style="margin:0"><a class="btn sec" href="/api/admin/backup" download>${esc(tr('Download database backup'))}</a><button class="btn sec" data-act="restorePick">${esc(tr('Restore backup …'))}</button><input type="file" id="restoreFile" accept=".db,application/octet-stream" hidden></div>
-    <p class="dim small" style="margin:10px 0 0">${esc(tr('The backup contains users (with password hashes), playlists and history, but no sessions. Keep it safe. The music files are not included. Restoring replaces everything with the state of the backup (the server first saves a copy of the current state in the data folder); everyone has to log in again afterwards.'))}</p></section>`;
+    <p class="dim small hint" style="margin:10px 0 0">${esc(tr('The backup contains users (with password hashes), playlists and history, but no sessions. Keep it safe. The music files are not included. Restoring replaces everything with the state of the backup (the server first saves a copy of the current state in the data folder); everyone has to log in again afterwards.'))}</p></section>`;
 }
+
+// The explanations on the system page are folded away; the "?" next to a card title shows them (and stays open over a refresh).
+const HINTS_OPEN = new Set();
+function foldHints(root) {
+  root.querySelectorAll('.acard').forEach((card) => {
+    const hints = card.querySelectorAll('.hint'), h = card.querySelector('h3');
+    if (!hints.length || !h) return;
+    const key = h.textContent.trim(), open = HINTS_OPEN.has(key);
+    hints.forEach((p) => { p.hidden = !open; });
+    h.insertAdjacentHTML('beforeend', `<button type="button" class="qbtn${open ? ' on' : ''}" data-hint="${esc(key)}" aria-label="${esc(tr('Show explanation'))}" aria-expanded="${open}">?</button>`);
+  });
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest && e.target.closest('.qbtn[data-hint]');
+  if (!b) return;
+  const open = !HINTS_OPEN.has(b.dataset.hint);
+  if (open) HINTS_OPEN.add(b.dataset.hint); else HINTS_OPEN.delete(b.dataset.hint);
+  b.classList.toggle('on', open); b.setAttribute('aria-expanded', open);
+  b.closest('.acard').querySelectorAll('.hint').forEach((p) => { p.hidden = !open; });
+});
 
 async function viewAdmin(my, sub = '') {
   setTab('admin');
@@ -1502,6 +1522,7 @@ async function viewAdmin(my, sub = '') {
   view.innerHTML = `<div class="acct wide">
     <div class="acct-head"><div><h1>${esc(tr('Admin area'))}</h1></div></div>
     ${adminTabs(sub)}${body}</div>`;
+  if (sub === 'system') foldHints(view);
   view.scrollTop = top;
   if (sub === 'plugins' && view.querySelector('[data-plugin-busy="1"]')) setTimeout(() => pollBusyPlugins(my), 3000);  // a plugin is being set up
 }
