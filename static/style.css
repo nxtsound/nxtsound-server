@@ -175,7 +175,7 @@ body{background:transparent;position:relative}
 /* Sections (panels) on the home page */
 .sect{margin:16px 12px 0;padding:22px 0 18px;border-radius:22px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);box-shadow:0 8px 24px rgba(0,0,0,.35)}
 .sect .hscroll{padding:0 22px 4px;scroll-padding-left:22px;gap:14px}
-.sect-hero{background:linear-gradient(160deg,rgba(150,0,30,.26),rgba(255,255,255,.03) 60%);border-color:rgba(255,60,80,.14)}
+.sect-hero{background:linear-gradient(160deg,rgba(150,0,30,.26),rgba(255,255,255,.03) 60%);}
 .phead{padding:0 22px 14px}
 .sect-flat{margin:22px -8px 0;padding:0;background:none;border:0;box-shadow:none;border-radius:0}
 .sect-flat .phead{padding:0 16px 12px}
@@ -419,8 +419,8 @@ body.tour-open{overflow:hidden}
 .mctl{display:flex;align-items:center}
 @media (min-width:900px){
   #app{display:grid;grid-template-columns:232px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"side head" "side body" "mini mini"}
-  #side{grid-area:side;display:flex;flex-direction:column;gap:2px;padding:calc(var(--top) + 20px) 12px 16px;border-right:1px solid rgba(255,255,255,.06);background:rgba(0,0,0,.35)}
-  .side-brand{font-size:26px;font-weight:800;letter-spacing:-.03em;padding:4px 12px 18px}
+  #side{grid-area:side;display:flex;flex-direction:column;gap:2px;padding:calc(var(--top) + 20px) 12px 16px;}
+  .side-brand{font-size:26px;font-weight:800;letter-spacing:-.03em;padding-left:10px;line-height:50px}
   #side a,#side .side-link{display:flex;align-items:center;gap:14px;height:44px;width:100%;padding:0 12px;border-radius:10px;color:var(--dim);font-size:15px;font-weight:600;text-align:left}
   #side a:hover,#side .side-link:hover{background:rgba(255,255,255,.06);color:var(--txt)}
   #side a.on{background:rgba(255,255,255,.1);color:var(--txt)}
@@ -689,7 +689,7 @@ select option{background:#1c1c1e;color:#fff}
 .note{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:12px;cursor:default}
 .note[data-nav-to]{cursor:pointer}
 .note:hover{background:rgba(255,255,255,.05)}
-.note.unread{background:rgba(255,0,51,.08)}
+.note.unread{background:rgba(195, 195, 195, 0.08)}
 .nbody{flex:1;min-width:0}
 .ntitle{font-weight:600;overflow-wrap:anywhere}
 .nsys{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 6px;margin-right:6px;border-radius:6px;background:rgba(255,255,255,.12);color:var(--dim);vertical-align:1px}

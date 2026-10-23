@@ -3746,8 +3746,10 @@ async function loadBell() {
 
 function openBell() {
   const items = (S.notes && S.notes.items) || [];
+  const tagOf = (n) => (n.system ? `<span class="nsys" style="margin-bottom:5px;">${esc(tr('System'))}</span><br>`
+    : n.kind === 'follow' ? `<span class="nsys" style="margin-bottom:5px;">${esc(tr('Community'))}</span><br>` : '');
   const row = (n) => `<div class="note${n.unread ? ' unread' : ''}" data-nid="${n.id}"${n.nav ? ` data-nav-to="${esc(n.nav)}"` : ''}>
-    <div class="nbody"><div class="ntitle">${n.system ? `<span class="nsys">${esc(tr('System'))}</span>` : ''}${esc(n.title)}</div>${n.body ? `<div class="dim small">${esc(n.body)}</div>` : ''}<div class="dim small">${esc(ago(n.created_at))}</div></div>
+    <div class="nbody"><div class="ntitle">${tagOf(n)}${esc(n.title)}</div>${n.body ? `<div class="dim small">${esc(n.body)}</div>` : ''}<div class="dim small">${esc(ago(n.created_at))}</div></div>
     <button class="nx" type="button" data-dismiss="${n.id}" aria-label="${esc(tr('Dismiss'))}">${IC.close}</button></div>`;
   openSheet(`<div class="sh-title">${esc(tr('Notifications'))}</div><div class="notelist">${items.length ? items.map(row).join('') : `<div class="empty" style="margin:24px 0 32px">${esc(tr('Nothing new.'))}</div>`}</div>`);
   const box = $('#sheet .panel');
