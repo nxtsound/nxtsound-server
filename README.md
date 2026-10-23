@@ -1,3 +1,5 @@
+<img src="static/icon.svg" alt="NxtSound logo" width="80">
+
 # NxtSound
 
 NxtSound is like a music streaming service you run selfhosted for you and your friends.
