@@ -624,6 +624,7 @@
  "This plugin was uploaded as a ZIP; upload the new version instead.": "Dieses Plugin wurde als ZIP hochgeladen; lade stattdessen die neue Version hoch.",
  "This server runs {current}.": "Dieser Server läuft mit {current}.",
  "Timed out, please try again": "Zeitüberschreitung, bitte nochmal versuchen",
+ "To switch between beta and stable, change the image tag in your docker-compose.yml: :beta for pre-releases, :latest for stable versions (or a fixed version such as :{version}).": "Um zwischen Beta und stabil zu wechseln, ändere den Image-Tag in deiner docker-compose.yml: :beta für Vorabversionen, :latest für stabile Versionen (oder eine feste Version wie :{version}).",
  "Too few tracks for this list yet.": "Noch zu wenig Titel für diese Liste.",
  "Too many attempts. Please try again in {wait} min.": "Zu viele Versuche. Bitte in {wait} min erneut versuchen.",
  "Too many attempts. Please try again in {wait} s.": "Zu viele Versuche. Bitte in {wait} s erneut probieren.",

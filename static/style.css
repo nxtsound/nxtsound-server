@@ -668,6 +668,7 @@ select option{background:#1c1c1e;color:#fff}
 .upd-info h4{margin:14px 0 6px;font-size:13px;color:var(--dim);font-weight:600}
 .changes{margin:0;padding-left:20px;font-size:14px;line-height:1.45}
 .changes li{margin:2px 0}
+.notes.md{white-space:normal;font:13px/1.45 system-ui,sans-serif}.notes.md h5{margin:10px 0 4px;font-size:13px}.notes.md p{margin:4px 0}.notes.md ul{margin:4px 0;padding-left:18px}.notes.md li{margin:3px 0}.notes.md code{font-family:ui-monospace,Menlo,monospace;font-size:12px}
 .notes{white-space:pre-wrap;margin:0;font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;max-height:calc(15 * 1.45em + 20px);overflow:auto;background:var(--card2);border-radius:10px;padding:10px 12px}
 .plugin-log{white-space:pre-wrap;word-break:break-word;margin:0 16px 8px;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;max-height:50vh;overflow:auto;background:var(--card2);border-radius:10px;padding:10px 12px;color:var(--dim)}
 .plugin-log .lw{color:#ffb74d}
