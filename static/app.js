@@ -782,7 +782,10 @@ async function viewLikes(my) {
 // ---------- Account and user management ----------
 
 const fmtDec = (v) => Number(v).toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-const fmtBytes = (b) => (b >= 1024 ** 3 ? fmtDec(b / 1024 ** 3) + ' GB' : Math.round(b / 1024 ** 2) + ' MB');
+const fmtBytes = (b) => (b >= 1024 ** 3 ? fmtDec(b / 1024 ** 3) + ' GB'
+  : b >= 10 * 1024 ** 2 ? Math.round(b / 1024 ** 2) + ' MB'
+  : b >= 1024 ** 2 ? fmtDec(b / 1024 ** 2) + ' MB'
+  : Math.round(b / 1024) + ' KB');
 
 function ago(ts) {
   if (!ts) return tr('never');
