@@ -192,7 +192,7 @@ class _Build:
                 async def similar_to(seed: dict) -> list[dict]:
                     if plugins.is_plugin_id(seed["id"]):  # a plugin song: the source's radio (slow, hence in parallel)
                         try:
-                            return await asyncio.to_thread(plugins.radio, seed["id"], 30)
+                            return await asyncio.to_thread(lambda: library.prefer_library(plugins.radio(seed["id"], 30)))
                         except plugins.PluginError:
                             return []
                     return await asyncio.to_thread(library.similar, seed["id"], 30, False, self.dice)

@@ -2113,6 +2113,12 @@ function playFromList(key, i) {
 const devParams = () => (S.devtools ? ['debug=1', S.devRng !== undefined && 'rng=' + S.devRng].filter(Boolean) : []);
 const radioQuery = () => { const q = [DJ.on && 'dj=1', ...devParams()].join('&'); return q ? '?' + q : ''; };
 
+// The same song from the library and from a plugin: title without "(feat. …)" and the first artist
+const songKey = (t) => {
+  const clean = (s) => String(s || '').toLowerCase().replace(/[(\[]\s*(feat\.?|ft\.?|featuring|with)\b[^)\]]*[)\]]/g, '').replace(/[^\p{L}\p{N} ]+/gu, '').replace(/\s+/g, ' ').trim();
+  return clean(t.title) + '|' + clean(String(t.artist || '').split(/,|&|;|\/| x /)[0]);
+};
+
 async function startRadio(track) {
   toast(tr('Starting radio …'));
   const token = ++S.radioToken;
@@ -2122,7 +2128,7 @@ async function startRadio(track) {
   try {
     const { tracks } = await api(`/radio/${encodeURIComponent(track.id)}${radioQuery()}`);
     if (token !== S.radioToken) return;
-    S.queue = [track, ...tracks.filter((t) => t.id !== track.id)];
+    S.queue = [track, ...tracks.filter((t) => t.id !== track.id && songKey(t) !== songKey(track))];
     refreshQueueIfOpen();
   } catch (e) { toast(tr('Radio unavailable: {why}', { why: e.message })); }
 }
@@ -2134,8 +2140,8 @@ function extendRadio() {
     try {
       const seed = S.queue[S.queue.length - 1].id;
       const { tracks } = await api(`/radio/${encodeURIComponent(seed)}${radioQuery()}`);
-      const have = new Set(S.queue.map((t) => t.id));
-      S.queue.push(...tracks.filter((t) => !have.has(t.id)));
+      const have = new Set(S.queue.map((t) => t.id)), haveKeys = new Set(S.queue.map(songKey));
+      S.queue.push(...tracks.filter((t) => !have.has(t.id) && !haveKeys.has(songKey(t))));
       refreshQueueIfOpen();
     } catch (_) { /* next attempt on the next track */ }
   })().finally(() => { S.extendP = null; });
@@ -3352,7 +3358,7 @@ function setMediaSession(t) {
 // Match the tempo, crossfade on the beat, with mix (bass swap), filter sweep or echo.
 // Only runs if both tracks have a detected tempo; otherwise it stays a normal track change.
 const DJ = {
-  on: false, style: 'auto', recent: [], ctx: null, nodes: null, unlocked: false,
+  on: false, style: 'auto', recent: [], aheadKey: '', ctx: null, nodes: null, unlocked: false,
   info: {}, plan: null, mixing: false, timer: 0, warmSec: 6, rateTimer: 0,
   fadeSec: 6,        // length of a plain crossfade
   fadeFallback: true, // songs that cannot be matched on the beat are crossfaded instead of cut
@@ -3656,6 +3662,7 @@ function djAbort() {
 function djTick() {
   if (!DJ.on || !DJ.ctx || audio.paused) return;
   if (DJ.ctx.state !== 'running') { DJ.ctx.resume().catch(() => {}); return; }
+  djAhead();
   const p = DJ.plan;
   if (p && p.bridge) { djBridgeTick(p); return; }
   if (p && p.warm && !p.skip) {
@@ -3704,6 +3711,17 @@ const BRIDGE_FADE_IN = 0.6, BRIDGE_FADE_OUT = 0.5, BRIDGE_B_SYNC = 5.0, BRIDGE_B
 
 function djBridgeWanted(t, nt, a, b) {
   return DJ.bridgeOn && a.usable && b.usable && S.djBridge && DJ.style !== 'fade' && /^local:/.test(t.id) && /^local:/.test(nt.id) && DJ.noBridge !== t.id + '>' + nt.id;
+}
+
+// Tells the server which songs come next, so that it makes the next two transitions now (not only when the song is almost over). Best effort.
+const DJ_AHEAD = 3;  // songs: the one that plays and the next two
+function djAhead() {
+  if (!DJ.bridgeOn || !S.djBridge || S.idx < 0) return;
+  const ids = S.queue.slice(S.idx, S.idx + DJ_AHEAD).map((t) => t.id);
+  const key = ids.join('>');
+  if (ids.length < 2 || key === DJ.aheadKey) return;
+  DJ.aheadKey = key;
+  api('/dj/ahead', { method: 'POST', json: { ids, avoid: DJ.recent.join(',') }, noRedirect: true }).catch(() => { DJ.aheadKey = ''; });
 }
 
 async function djBridgePrepare(t, nt) {

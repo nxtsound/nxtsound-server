@@ -396,3 +396,21 @@ def test_with_a_stem_model_the_bridge_is_made_with_the_singing_led_on_its_own(cl
     monkeypatch.setattr(stems, "vocals", lambda x: (_ for _ in ()).throw(RuntimeError("no model")))
     r2 = c.get("/api/dj/bridge", params={"a": ids["Click A"], "b": ids["Click B"], "style": "filter"}).json()
     assert not r2["skip"] and r2["vocals"] is None  # a bridge without it is still a bridge
+
+
+@needs_audio
+def test_the_player_can_have_the_next_bridges_made_ahead_of_time(clicks):
+    import time
+    c, ids = clicks
+    a, b = ids["Click A"], ids["Click B"]
+    assert c.post("/api/dj/ahead", json={"ids": [a]}).json() == {"started": 0}  # nothing to make from one song
+    assert c.post("/api/dj/ahead", json={"ids": [a, "yt:abcdefghijk"]}).json()["started"] == 1  # (it finds out for itself that a plugin song has no bridge)
+    assert c.post("/api/dj/ahead", json={"ids": [a, b, a, b, a]}).status_code == 422  # not more than a few
+    assert c.post("/api/dj/ahead", json={"ids": [a, b], "avoid": "disco"}).status_code == 422
+    assert c.post("/api/dj/ahead", json={"ids": [a, b]}).json() == {"started": 1}
+    for _ in range(100):  # it is made in the background
+        if list(djmix.BRIDGE_DIR.glob("*.m4a")):
+            break
+        time.sleep(0.1)
+    r = c.get("/api/dj/bridge", params={"a": a, "b": b}).json()  # asked for the way the player asks: the bridge is the one that was made ahead
+    assert not r.get("pending") and not r["skip"] and len(list(djmix.BRIDGE_DIR.glob("*.m4a"))) == 1

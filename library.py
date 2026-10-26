@@ -416,6 +416,75 @@ def _track(r) -> dict:
     }
 
 
+# ---------- The same song twice (library and plugin) ----------
+
+_FEAT = re.compile(r"[\(\[]\s*(?:feat\.?|ft\.?|featuring|with)\b[^\)\]]*[\)\]]", re.I)
+_twins: tuple | None = None
+
+
+def _seconds(text) -> float:
+    """"2:47" -> 167.0 (0 if unknown)."""
+    try:
+        parts = [int(p) for p in str(text).split(":")]
+    except ValueError:
+        return 0.0
+    return float(sum(p * 60 ** i for i, p in enumerate(reversed(parts)))) if parts and len(parts) <= 3 else 0.0
+
+
+def _title_key(title: str) -> str:
+    return re.sub(r"[^\w ]+", "", _norm(_FEAT.sub("", title or "")))
+
+
+def _artist_keys(artist: str) -> set[str]:
+    parts = re.split(r",|&|;|/| x | feat\.? | ft\.? | with ", _norm(artist or ""))
+    return {re.sub(r"[^\w ]+", "", p).strip() for p in parts if p.strip()}
+
+
+def _twin_index() -> dict:
+    """Title (without "feat.") -> the library songs of that title; made again when the library changes."""
+    global _twins
+    with db.db() as c:
+        stamp = tuple(c.execute("SELECT COUNT(*), COALESCE(MAX(mtime), 0) FROM lib_tracks").fetchone())
+        if _twins and _twins[0] == stamp:
+            return _twins[1]
+        index: dict[str, list] = {}
+        for r in c.execute("SELECT id, title, artist, duration FROM lib_tracks"):
+            index.setdefault(_title_key(r["title"]), []).append((r["id"], _artist_keys(r["artist"]), r["duration"] or 0.0))
+    _twins = (stamp, index)
+    return index
+
+
+def twin_of(t: dict) -> str | None:
+    """The ID of the library song that is the same as the (plugin) song `t`: the same title (feat. does not count), one artist in common,
+    and if both durations are known, within 4 s of each other."""
+    if not t or str(t.get("id", "")).startswith("local:") or not t.get("title"):
+        return None
+    mine, dur = _artist_keys(t.get("artist", "")), _seconds(t.get("duration"))
+    for tid, theirs, d in _twin_index().get(_title_key(t["title"]), []):
+        if (mine & theirs or (not mine and not theirs)) and (not dur or not d or abs(dur - d) <= 4):
+            return tid
+    return None
+
+
+def prefer_library(tracks: list[dict]) -> list[dict]:
+    """A plugin song that is in the library as well is replaced by the library's: it plays from the files (and can be mixed by the DJ).
+    Every song appears once."""
+    out, seen = [], set()
+    for t in tracks:
+        tid = twin_of(t)
+        if tid:
+            t = get_track(tid) or t
+        if t["id"] not in seen:
+            seen.add(t["id"])
+            out.append(t)
+    return out
+
+
+def without_twins(tracks: list[dict]) -> list[dict]:
+    """The (plugin) songs that are not in the library already: for a list that shows the library's songs as well."""
+    return [t for t in tracks if not twin_of(t)]
+
+
 def get_track(track_id: str) -> dict | None:
     with db.db() as c:
         r = c.execute("SELECT * FROM lib_tracks WHERE id = ?", (track_id,)).fetchone()

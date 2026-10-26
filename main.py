@@ -7,6 +7,7 @@ Self-hosted music server (FastAPI backend) with a web UI.
 - Home page with recommendations from the listening history, DJ analysis (tempo, key) for the web player
 """
 import asyncio
+from concurrent.futures import Future, ThreadPoolExecutor
 import hashlib
 import hmac
 import json
@@ -175,6 +176,10 @@ def _check_id(track_id: str) -> str:
     if not TRACK_ID_RE.match(track_id):
         raise HTTPException(400, tr("Invalid track_id"))
     return track_id
+
+
+def _id_ok(track_id: str) -> bool:
+    return bool(TRACK_ID_RE.match(track_id))
 
 
 def _check_browse(value: str) -> str:
@@ -1050,7 +1055,10 @@ async def search(q: str = Query(min_length=1, max_length=200), kind: str = "song
         if kind == "songs":
             items = [{**t, "type": "track"} for t in items]
     if source != "local":  # all/plugins: every active plugin, otherwise only the named one
-        items = items + await asyncio.to_thread(plugins.search, q, kind, "" if source in ("all", "plugins") else source)
+        found = await asyncio.to_thread(plugins.search, q, kind, "" if source in ("all", "plugins") else source)
+        if kind == "songs":  # a song that the library has as well is listed once (by the library)
+            found = await asyncio.to_thread(library.without_twins, found)
+        items = items + found
     if source != "plugins":  # the UI asks twice (library, plugins): record the search history only once
         await asyncio.to_thread(db.record_search, user["id"], q)
     return {"kind": kind, "items": items}
@@ -1067,7 +1075,7 @@ async def radio(track_id: str, limit: int = Query(40, ge=1, le=100), dj: bool = 
     blocked = await asyncio.to_thread(db.blocked_sets, user["id"])
     if plugins.is_plugin_id(track_id):
         try:
-            found = _allowed(await asyncio.to_thread(plugins.radio, track_id, limit), blocked)
+            found = _allowed(await asyncio.to_thread(lambda: library.prefer_library(plugins.radio(track_id, limit))), blocked)
         except plugins.PluginError:
             return {"tracks": []}
         if explain:  # the plugin decides what is similar; the server only knows the order
@@ -1681,21 +1689,29 @@ def _analysis_of(track_id: str, path: Path) -> dict | None:
     return db.get_bpm(track_id)
 
 
-_bridge_jobs: dict[str, asyncio.Future] = {}
+_bridge_jobs: dict[str, Future] = {}
 BRIDGE_WAIT = 20.0  # seconds a request waits for the bridge before it answers "not yet"
+AHEAD_MAX = 4  # songs (3 transitions) that the player may ask to have ready
+STYLE_RE = "(blend|filter|echo|loop|bass|cut|reverb)"
 
 
-@api.get("/dj/bridge")
-async def dj_bridge(a: str = Query(max_length=64), b: str = Query(max_length=64), style: str = Query("auto", pattern="^(auto|blend|filter|echo|loop|bass|fade)$"),
-                    avoid: str = Query("", pattern="^((blend|filter|echo|loop|bass)(,(blend|filter|echo|loop|bass))?)?$")):
-    """The transition from song `a` into song `b`, made on the server (see djmix.py): the plan (times, style, stretch) and `url` of the audio file.
-    {"skip": true, "why"} if there is none (a plugin song, no usable tempo analysis, no room before the end): the player then does the transition itself."""
-    _check_id(a)
-    _check_id(b)
+def _lower_priority() -> None:
+    """The bridge worker works at a lower priority than the requests of the listeners (separating the singing takes all the cores it may use)."""
+    try:
+        os.setpriority(os.PRIO_PROCESS, 0, 5)  # on Linux this is the calling thread only
+    except (AttributeError, OSError):
+        pass
+
+
+_bridge_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="bridge", initializer=_lower_priority)  # one bridge at a time, behind the others
+
+
+def _bridge_job(a: str, b: str, style: str, avoid: str):
+    """-> (future of the bridge, None) or (None, an answer that needs no work). The same bridge asked for twice is made once."""
     if a == b or plugins.is_plugin_id(a) or plugins.is_plugin_id(b):
-        return {"skip": True, "why": "only songs of the library can be mixed on the server"}
+        return None, {"skip": True, "why": "only songs of the library can be mixed on the server"}
     if not djmix.available():
-        return {"skip": True, "why": "bridges are turned off on this server"}
+        return None, {"skip": True, "why": "bridges are turned off on this server"}
     pa, pb = library.file_path(a), library.file_path(b)
     if not pa or not pb:
         raise HTTPException(404, tr("Track not found"))
@@ -1706,19 +1722,72 @@ async def dj_bridge(a: str = Query(max_length=64), b: str = Query(max_length=64)
             row = c.execute("SELECT duration FROM lib_tracks WHERE id = ?", (a,)).fetchone()
         return djmix.make(a, b, pa, pb, ia or {}, ib or {}, float(row["duration"] if row else 0), style, avoid)
 
-    # A bridge can take a while (separating the singing of both songs): the work goes on in the background and the player asks again
     job_id = f"{a}|{b}|{style}|{avoid}"
     job = _bridge_jobs.get(job_id)
     if job is None:
-        job = _bridge_jobs[job_id] = asyncio.get_running_loop().run_in_executor(None, work)
+        job = _bridge_jobs[job_id] = _bridge_pool.submit(work)
         job.add_done_callback(lambda _f: _bridge_jobs.pop(job_id, None))
-    try:
-        res = await asyncio.wait_for(asyncio.shield(job), timeout=BRIDGE_WAIT)
-    except asyncio.TimeoutError:
-        return {"pending": True, "retry": 3}
+    return job, None
+
+
+@api.get("/dj/bridge")
+async def dj_bridge(a: str = Query(max_length=64), b: str = Query(max_length=64), style: str = Query("auto", pattern=f"^(auto|{STYLE_RE[1:-1]}|fade)$"),
+                    avoid: str = Query("", pattern=f"^({STYLE_RE}(,{STYLE_RE})?)?$")):
+    """The transition from song `a` into song `b`, made on the server (see djmix.py): the plan (times, style, stretch) and `url` of the audio file.
+    {"skip": true, "why"} if there is none (a plugin song, no usable tempo analysis, no room before the end): the player then does the transition itself.
+    {"pending": true, "retry": s}: it is being made (it can take a while), ask again."""
+    _check_id(a)
+    _check_id(b)
+    job, res = _bridge_job(a, b, style, avoid)
+    if job is not None:  # a bridge can take a while (separating the singing of both songs): the work goes on in the background
+        try:
+            res = await asyncio.wait_for(asyncio.shield(asyncio.wrap_future(job)), timeout=BRIDGE_WAIT)
+        except asyncio.TimeoutError:
+            return {"pending": True, "retry": 3}
     if not res.get("skip"):
         res["url"] = f"/api/dj/bridge/{res['key']}.m4a"
     return res
+
+
+class AheadIn(BaseModel):
+    ids: list[str] = Field(max_length=AHEAD_MAX)
+    avoid: str = Field("", pattern=f"^({STYLE_RE}(,{STYLE_RE})?)?$")
+
+
+_ahead_running: set[tuple] = set()
+_ahead_tasks: set[asyncio.Task] = set()
+
+
+async def _ahead(ids: list[str], avoid: str, key: tuple) -> None:
+    """Makes the bridges of the next transitions one after the other, the nearest first. The styles are chosen the way the player will ask for them
+    (it avoids the last two): what the first bridge turned out as is what the second one avoids."""
+    recent = [x for x in avoid.split(",") if x]
+    try:
+        for a, b in zip(ids, ids[1:]):
+            job, res = _bridge_job(a, b, "auto", ",".join(recent))
+            if job is not None:
+                res = await asyncio.shield(asyncio.wrap_future(job))
+            if not res.get("skip"):
+                recent = [res["style"], *recent][:2]
+    except Exception as e:  # best effort: the player asks again when the time has come
+        log.info("DJ: bridges ahead: %s", e)
+    finally:
+        _ahead_running.discard(key)
+
+
+@api.post("/dj/ahead")
+async def dj_ahead(body: AheadIn):
+    """The player tells which songs come next: the bridges between them are made now, in the background, so that they are there in time
+    (the next two transitions, or more if the queue is long enough). Best effort."""
+    ids = [i for i in body.ids if len(i) <= 64 and _id_ok(i)]
+    key = (tuple(ids), body.avoid)
+    if len(ids) < 2 or not djmix.available() or key in _ahead_running:
+        return {"started": 0}
+    _ahead_running.add(key)
+    task = asyncio.create_task(_ahead(ids, body.avoid, key))
+    _ahead_tasks.add(task)
+    task.add_done_callback(_ahead_tasks.discard)
+    return {"started": len(ids) - 1}
 
 
 @api.get("/dj/bridge/{key}.m4a")
