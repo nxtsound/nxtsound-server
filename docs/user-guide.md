@@ -201,6 +201,12 @@ With DJ mode on, the radio orders songs into a chain with matching tempo and com
 into the next on the beat. The server analyzes tracks in the background after each scan (turn off with `ANALYZE=0`). DJ mode is off
 on iPhones and iPads, where the system does not allow precise timing for background audio.
 
+**Made by the server:** for songs of your library the transition itself is made by the server (a short audio file, the *bridge*, with the end of one song and
+the start of the next lined up exactly, the tempo matched and the effect applied). The player fades over to it a few seconds before the transition and back to
+the next song a few seconds after it. While it plays the screen says *Old song > New song* by *NxtSound DJ*; play, pause, jumping and skipping work as always
+(skipping plays the next song from its start). Songs from a plugin, and songs without a clear beat, are blended by the player as before. The menu has an option
+*Let the server make the transitions* to turn this off.
+
 **Crossfade:** in the DJ menu (tap the DJ button in the big player) choose the style *Crossfade* to simply fade one song out while the next fades in, without matching the tempo.
 The length (3, 6, 9 or 12 seconds) is in the same menu. With the option *Crossfade songs that cannot be matched on the beat* switched on (the default), the other styles fall back to a
 crossfade when two songs do not fit, instead of cutting from one to the next. Very short songs (under 30 seconds) and live streams are never blended.

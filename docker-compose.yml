@@ -39,6 +39,8 @@ services:
       ENRICH: "${ENRICH:-1}"
       ANALYZE: "${ANALYZE:-1}"
       DEVTOOLS: "${DEVTOOLS:-0}"
+      DJ_BRIDGES: "${DJ_BRIDGES:-1}"
+      DJ_BRIDGE_MB: "${DJ_BRIDGE_MB:-300}"
       SCAN_MINUTES: "${SCAN_MINUTES:-0}"
       MUSIC_ACCESS: "${MUSIC_ACCESS:-ro}"
     volumes:

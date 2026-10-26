@@ -79,6 +79,7 @@ const audio = new Proxy(elA, {
 
 // Project name from the server (configured centrally) so it is never hardcoded in the frontend
 fetch('/api/server-info').then((r) => r.json()).then((i) => {
+  S.djBridge = (i.functions || []).includes('dj_bridge');  // the server can make DJ transitions
   if (!i.name) return;
   document.title = i.name;
   document.querySelectorAll('[data-appname]').forEach((el) => { el.textContent = i.name; });
@@ -2234,6 +2235,7 @@ async function next() {
 }
 
 function prev() {
+  if (S.bridge) { playIndex(S.idx); return; }  // in the middle of a transition "previous" goes back to the old song, from its start
   if (audio.currentTime > 3 || S.idx <= 0) { audio.currentTime = 0; return; }
   playIndex(S.idx - 1);
 }
@@ -2323,7 +2325,7 @@ function renderNowPlaying() {
   const t = currentTrack(), text = t && S.live ? nowPlayingText() : '';
   $('#fNow').hidden = !text;
   $('#fNow').innerHTML = text ? `<span class="dim">${esc(tr('Now playing'))}</span>${esc(text)}` : '';
-  if (t && !S.loading) $('#mArtist').textContent = text || t.artist;
+  if (t && !S.loading) $('#mArtist').textContent = text || shownTrack(t).artist;
   if (t) setMediaSession(t);
 }
 function nowPlayingStop() {
@@ -2361,22 +2363,42 @@ function syncLive() {
   if (live) setProgress(0);
 }
 
+// While a DJ bridge plays, the screen says "Old song > New song" by "NxtSound DJ" (the queue still has the old song as the one that plays)
+function shownTrack(t) {
+  return S.bridge && t === currentTrack() ? { ...t, title: S.bridge.title, artist: 'NxtSound DJ', album: '', album_id: '', artist_id: '' } : t;
+}
+
+function syncTitles() {
+  const t = currentTrack();
+  if (!t) return;
+  const v = shownTrack(t);
+  $('#mTitle').textContent = v.title;
+  $('#mArtist').textContent = v.artist;
+  $('#fTitleText').textContent = v.title;
+  $('#fTitle').classList.toggle('link', !!v.album_id);
+  $('#fArtist').textContent = v.artist;
+  $('#fArtistBtn').hidden = !v.artist_id;
+  $('#fAlbumBtn').hidden = !v.album_id;
+  setMediaSession(t);
+}
+
 function updateNow() {
   const t = currentTrack();
   if (!t) return;
+  const v = shownTrack(t);
   coverGlow(t.thumb);
   document.body.classList.add('has-track');
   $('#mini').hidden = false;
   setImg($('#mCover'), t.thumb);
   setImg($('#fCover'), t.thumb);
-  $('#mTitle').textContent = t.title;
-  $('#mArtist').textContent = t.artist;
-  $('#fTitleText').textContent = t.title;
-  $('#fTitle').classList.toggle('link', !!t.album_id);
-  $('#fArtist').textContent = t.artist;
+  $('#mTitle').textContent = v.title;
+  $('#mArtist').textContent = v.artist;
+  $('#fTitleText').textContent = v.title;
+  $('#fTitle').classList.toggle('link', !!v.album_id);
+  $('#fArtist').textContent = v.artist;
   $('#fSrc').textContent = srcName(t);
-  $('#fArtistBtn').hidden = !t.artist_id;
-  $('#fAlbumBtn').hidden = !t.album_id;
+  $('#fArtistBtn').hidden = !v.artist_id;
+  $('#fAlbumBtn').hidden = !v.album_id;
   $('#fCur').textContent = '0:00';
   $('#fDur').textContent = t.duration || '';
   resetLyrics();
@@ -2548,7 +2570,7 @@ function showLoadInfo(text) {
   if (text && !S.loading) return;  // a late answer after start-up must not bring the display back
   const t = currentTrack();
   $('#fLoad').textContent = text;
-  $('#mArtist').textContent = text || (t ? t.artist : '');
+  $('#mArtist').textContent = text || (t ? shownTrack(t).artist : '');
 }
 
 const stateText = () => `paused ${audio.paused}, time ${audio.currentTime.toFixed(2)}, ended ${audio.ended}, seeking ${audio.seeking}, rate ${audio.playbackRate}, muted ${audio.muted}, volume ${audio.volume}, visible ${document.visibilityState}`;
@@ -3136,6 +3158,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 window.addEventListener('pagehide', savePos);
 
 audio.addEventListener('ended', () => {
+  if (DJ.plan && DJ.plan.bridge && DJ.plan.started && !DJ.plan.switched && !DJ.plan.bFailed) { djBridgeEnded(DJ.plan); return; }  // the bridge ran out before the new song took over
   evlog(`ended at ${audio.currentTime.toFixed(0)} s${document.visibilityState === 'hidden' ? ' (background)' : ''}`);
   savePos();
   if (S.repeat === 'one') { audio.currentTime = 0; audio.play().catch(() => {}); } else next();
@@ -3318,6 +3341,7 @@ initMediaKeys();
 
 function setMediaSession(t) {
   if (!('mediaSession' in navigator)) return;
+  t = shownTrack(t);
   initMediaKeys();  // iOS likes to drop handlers on a track change: set them again per track so previous/next stays instead of a 10-s jump
   const np = S.live && S.np && S.np.title && currentTrack() === t ? S.np : null;  // live radio: the song that plays now, with the station as album
   navigator.mediaSession.metadata = new MediaMetadata({ title: np ? np.title : t.title, artist: np ? np.artist || t.title : t.artist, album: np ? t.title : t.album || '', artwork: t.thumb ? [{ src: t.thumb, sizes: '512x512' }] : [] });
@@ -3331,6 +3355,8 @@ const DJ = {
   info: {}, plan: null, mixing: false, timer: 0, warmSec: 6, rateTimer: 0,
   fadeSec: 6,        // length of a plain crossfade
   fadeFallback: true, // songs that cannot be matched on the beat are crossfaded instead of cut
+  bridgeOn: true,     // let the server make the transition (a "bridge", see below) where it can
+  noBridge: '',       // "old>new" of a pair for which the server had none: the player does that one itself
 };
 // iPhone/iPad: DJ mode off (iOS does not clock two audio elements reliably in the background: stuttering, loops, drifting tempo)
 const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -3341,11 +3367,13 @@ try {
   const fs = parseInt(localStorage.getItem('app_dj_fade'), 10);
   if (fs >= 2 && fs <= 12) DJ.fadeSec = fs;
   DJ.fadeFallback = localStorage.getItem('app_dj_fb') !== '0';
+  DJ.bridgeOn = localStorage.getItem('app_dj_bridge') !== '0';
 } catch (_) { /* without storage */ }
 const djSave = () => {
   try {
     localStorage.setItem('app_dj', DJ.on ? '1' : '0'); localStorage.setItem('app_dj_style', DJ.style);
     localStorage.setItem('app_dj_fade', String(DJ.fadeSec)); localStorage.setItem('app_dj_fb', DJ.fadeFallback ? '1' : '0');
+    localStorage.setItem('app_dj_bridge', DJ.bridgeOn ? '1' : '0');
   } catch (_) { /* ignore */ }
 };
 const otherEl = () => (curEl === elA ? elB : elA);
@@ -3612,6 +3640,8 @@ function djRateBack(el) {  // gently return the tempo to 1 after the transition
 }
 
 function djAbort() {
+  if (S.bridge) { S.bridge = null; syncTitles(); }
+  if (DJ.plan && DJ.plan.hand) DJ.plan.hand = null;
   if (!DJ.ctx || (!DJ.plan && !DJ.mixing)) { DJ.plan = null; return; }
   DJ.plan = null;
   DJ.mixing = false;
@@ -3628,6 +3658,7 @@ function djTick() {
   if (!DJ.on || !DJ.ctx || audio.paused) return;
   if (DJ.ctx.state !== 'running') { DJ.ctx.resume().catch(() => {}); return; }
   const p = DJ.plan;
+  if (p && p.bridge) { djBridgeTick(p); return; }
   if (p && p.warm && !p.skip) {
     if (!p.switched && (S.queue[S.idx + 1] || {}).id !== p.id) { djAbort(); return; }  // the queue was changed
     const ea = p.switched ? otherEl() : curEl, eb = p.switched ? curEl : otherEl();
@@ -3652,6 +3683,7 @@ function djTick() {
   if (!p) {
     const a = DJ.info[t.id], b = DJ.info[nt.id];
     if (fadeOnly) DJ.plan = djPlanFade(nt, a, dur);
+    else if (a && b && a.ready && b.ready && djBridgeWanted(t, nt, a, b)) djBridgePrepare(t, nt);
     else if (a && b && a.ready && b.ready) {
       DJ.plan = djPlan(nt, a, b, dur);
       if (DJ.plan.skip && DJ.fadeFallback) DJ.plan = djPlanFade(nt, a, dur);  // cannot be matched on the beat: blend them anyway
@@ -3662,6 +3694,171 @@ function djTick() {
   }
   if (p.skip) return;
   if (p.tA - audio.currentTime <= DJ.warmSec + 0.1) djWarm(p);
+}
+
+// ---------- DJ bridges ----------
+// The server makes the stretch of music in which one song turns into the next (a "bridge", see djmix.py): the two songs lined up to the sample, with the
+// effect. The old song plays as usual. A few seconds before the transition the player fades over to the bridge, which begins with the old song (the same
+// music, so the fade is not heard), and a few seconds after the transition it fades over to the new song's own file (the bridge ends with the new song).
+// In between the bridge is the current element: play, pause, skip and seeking work on it like on any song. The screen says "Old > New" by "NxtSound DJ".
+const BRIDGE_FADE_IN = 0.6, BRIDGE_FADE_OUT = 2.0, BRIDGE_B_SYNC = 5.0, BRIDGE_B_WARM = 14;  // seconds
+
+function djBridgeWanted(t, nt, a, b) {
+  return DJ.bridgeOn && a.usable && b.usable && S.djBridge && DJ.style !== 'fade' && /^local:/.test(t.id) && /^local:/.test(nt.id) && DJ.noBridge !== t.id + '>' + nt.id;
+}
+
+async function djBridgePrepare(t, nt) {
+  const p = { bridge: true, pending: true, id: nt.id, from: t.id, skip: false, warm: false, started: false, switched: false, fade: false, stage: 'wait', hand: null };
+  DJ.plan = p;
+  let r = null;
+  try {
+    r = await api(`/dj/bridge?a=${encodeURIComponent(t.id)}&b=${encodeURIComponent(nt.id)}&style=${DJ.style}${DJ.last && DJ.last !== 'fade' ? '&avoid=' + DJ.last : ''}`, {}, 60000);
+  } catch (_) { /* the player makes this transition itself */ }
+  if (DJ.plan !== p) return;  // the song was changed or DJ mode stopped while the server worked
+  const why = !r ? 'the server did not answer' : r.skip ? r.why : r.a_start - audio.currentTime < 2.5 ? 'it came too late' : '';
+  if (why) { DJ.noBridge = t.id + '>' + nt.id; DJ.plan = null; evlog('No bridge: ' + why); return; }
+  Object.assign(p, {
+    pending: false, el: otherEl(), dur: r.duration, a0: r.a_start, mixSec: r.mix_sec, tA: r.t_a, style: r.style, lock: r.lock, rate: r.rate, beatA: r.beat_a,
+    bpmB: r.bpm_b, X: r.x, bResume: r.b_resume, align: { ms: r.align_ms, strength: r.align_strength }, title: `${t.title} > ${nt.title}`,
+    info: { fit: r.info.fit, hot: r.info.hot, hasOutro: r.info.has_outro, bars: r.info.bars, mb: r.info.mb },
+  });
+  DJ.last = r.style;
+  djNeutral(nodeOf(p.el), 0);
+  p.el.playbackRate = 1;
+  p.el.preload = 'auto';
+  p.el.src = r.url;  // a small file: it is there long before it is needed
+  p.warm = true;     // from now on the loop looks every 40 ms
+}
+
+// Fades from one element to the other (equal power) over `sec`
+function djFade(out, inc, sec) {
+  const t0 = DJ.ctx.currentTime + 0.02;
+  const curve = (up) => Float32Array.from({ length: 64 }, (_, i) => (up ? Math.sin : Math.cos)((i / 63) * Math.PI / 2));
+  [out, inc].forEach((n) => n.gain.gain.cancelScheduledValues(t0));
+  out.gain.gain.setValueCurveAtTime(curve(false), t0, sec);
+  inc.gain.gain.setValueCurveAtTime(curve(true), t0, sec);
+}
+
+// Hands the sound from one element to another that plays the same music: the incoming one starts silent, is brought to the same place in the music
+// (h.want() says where it has to be; a few corrections while it is silent), then the fade runs. The two are the same music, so a small rest of difference is not heard.
+function djHandOff(p, h) {
+  h.phase = 'sync'; h.tries = 0; h.t0 = performance.now();
+  p.hand = h;
+  djNeutral(nodeOf(h.in), 0);
+  h.in.playbackRate = h.rate;
+  const go = () => { h.in.currentTime = Math.max(0, h.want() + 0.05 * h.rate); h.in.play().catch(() => djBridgeFail(p)); };
+  if (h.in.readyState >= 1) go(); else h.in.addEventListener('loadedmetadata', go, { once: true });
+}
+
+function djHandTick(p) {
+  const h = p.hand;
+  if (!h) return;
+  const el = h.in;
+  if (h.phase === 'sync') {
+    if (performance.now() - h.t0 > 6000 || el.error) { djBridgeFail(p); return; }
+    if (el.paused || el.seeking || el.readyState < 3) return;
+    const drift = h.want() - el.currentTime;
+    if (Math.abs(drift) > 0.015 && h.tries < 3) { h.tries++; el.currentTime = Math.max(0, el.currentTime + drift + 0.03 * h.rate); return; }
+    h.phase = 'fade'; h.fadeAt = performance.now();
+    djFade(nodeOf(h.out), nodeOf(h.in), h.xf);
+    h.onStart();
+  } else if (performance.now() - h.fadeAt >= h.xf * 1000 + 80) djHandDone(p);
+}
+
+function djHandDone(p) {
+  const h = p.hand;
+  if (!h) return;
+  p.hand = null;
+  h.out.pause();
+  djNeutral(nodeOf(h.out), 1);
+  djNeutral(nodeOf(h.in), 1);
+  h.onDone();
+}
+
+function djBridgeFail(p) {
+  const h = p.hand;
+  if (h) { h.in.pause(); h.in.removeAttribute('src'); h.in.load(); djNeutral(nodeOf(h.in), 1); p.hand = null; }
+  if (p.stage === 'in' || !p.started) { DJ.noBridge = p.from + '>' + p.id; djAbort(); evlog('Bridge: the transition did not start'); return; }
+  p.bFailed = true;  // the new song could not take over: the bridge plays out and the queue goes on from the new song's start
+}
+
+function djBridgeStart(p) {
+  const eA = curEl, br = p.el;
+  p.elB = eA;  // when the old song has faded out, its element is free for the new song
+  p.started = true; DJ.mixing = true; p.t0 = performance.now(); p.stage = 'in';
+  djHandOff(p, {
+    out: eA, in: br, rate: 1, xf: BRIDGE_FADE_IN, want: () => eA.currentTime - p.a0,
+    onStart() { curEl = br; S.bridge = { title: p.title }; syncTitles(); setPlaying(true, false); },
+    onDone() { eA.removeAttribute('src'); eA.load(); p.stage = 'run'; },
+  });
+}
+
+function djBridgeToNew(p) {
+  const br = p.el, eb = p.elB;
+  p.stage = 'out'; p.bStarted = true;
+  if (!eb.getAttribute('src')) eb.src = `/api/stream/${encodeURIComponent(p.id)}`;
+  djHandOff(p, {
+    out: br, in: eb, rate: p.rate, xf: BRIDGE_FADE_OUT, want: () => p.bResume - (p.dur - br.currentTime) * p.rate,
+    onStart() { curEl = eb; S.bridge = null; p.switched = true; playIndex(S.idx + 1, { mix: true }); setPlaying(true, false); },
+    onDone() {
+      br.removeAttribute('src'); br.load();
+      if (Math.abs(eb.playbackRate - 1) > 0.001) djRateBack(eb);  // the new song was played slightly faster or slower to match: back to normal, gently
+      DJ.mixing = false; DJ.plan = null; p.stage = 'done';
+    },
+  });
+}
+
+function djBridgeTick(p) {
+  if (p.pending) return;
+  djHandTick(p);
+  if (!p.started) {
+    if ((S.queue[S.idx + 1] || {}).id !== p.id) { djAbort(); return; }  // the queue was changed
+    if (p.el.error) { DJ.noBridge = p.from + '>' + p.id; djAbort(); return; }
+    const ca = audio.currentTime;
+    if (ca > p.a0 + 1.5) { DJ.noBridge = p.from + '>' + p.id; djAbort(); return; }  // jumped past it
+    if (ca >= p.a0 - 0.04 && !audio.paused && p.el.readyState >= 3) djBridgeStart(p);
+    else if (ca >= p.a0 + 0.5) { DJ.noBridge = p.from + '>' + p.id; djAbort(); evlog('Bridge: the file was not ready'); }
+    return;
+  }
+  if (p.hand || p.stage !== 'run' || p.bFailed) return;
+  const br = p.el;
+  if (!p.bStarted && (S.queue[S.idx + 1] || {}).id !== p.id) { p.bFailed = true; return; }  // the queue was changed meanwhile: the bridge plays out and the queue goes on
+  if (!p.bWarm && br.currentTime >= p.dur - BRIDGE_B_WARM) {  // load the new song's file in good time
+    p.bWarm = true;
+    djNeutral(nodeOf(p.elB), 0);
+    p.elB.preload = 'auto';
+    p.elB.src = `/api/stream/${encodeURIComponent(p.id)}`;
+  }
+  if (!p.bStarted && !br.paused && br.currentTime >= p.dur - BRIDGE_B_SYNC) djBridgeToNew(p);
+}
+
+// The user paused: a fade that is in progress ends at once; one that has not got going (still bringing the other element to the right place) is given up for now
+function djBridgeSettle(p) {
+  const h = p.hand;
+  if (!h) return;
+  if (h.phase === 'fade') { djHandDone(p); return; }
+  p.hand = null;
+  h.in.pause();
+  if (p.stage === 'in') { p.started = false; p.stage = 'wait'; DJ.mixing = false; djNeutral(nodeOf(h.in), 0); return; }  // the bridge is kept: it starts again when the old song plays on
+  h.in.removeAttribute('src'); h.in.load(); djNeutral(nodeOf(h.in), 1);
+  p.bStarted = false; p.bWarm = false; p.stage = 'run';
+}
+
+// The bridge ran to its end before the new song took over (timers that were held back, a jump to the very end): continue with the new song's own file
+function djBridgeEnded(p) {
+  const eb = p.elB;
+  p.hand = null;
+  eb.src = `/api/stream/${encodeURIComponent(p.id)}`;
+  eb.playbackRate = p.rate;
+  const go = () => { eb.currentTime = p.bResume; eb.play().catch(() => {}); };
+  if (eb.readyState >= 1) go(); else eb.addEventListener('loadedmetadata', go, { once: true });
+  djNeutral(nodeOf(eb), 1); djNeutral(nodeOf(p.el), 1);
+  curEl = eb; S.bridge = null; p.switched = true;
+  playIndex(S.idx + 1, { mix: true });
+  setPlaying(true, false);
+  p.el.removeAttribute('src'); p.el.load();
+  if (Math.abs(p.rate - 1) > 0.001) djRateBack(eb);
+  DJ.mixing = false; DJ.plan = null;
 }
 
 function djLoop() {
@@ -3675,8 +3872,14 @@ function djLoop() {
 
 // A pause or seek by the user aborts a running transition
 [elA, elB].forEach((el) => {
-  el.addEventListener('pause', () => { if (el === curEl && (DJ.mixing || (DJ.plan && DJ.plan.warm))) djAbort(); });
-  el.addEventListener('seeking', () => { if (el === curEl && DJ.plan && DJ.plan.warm && !DJ.plan.started) djAbort(); });
+  el.addEventListener('pause', () => {
+    if (el !== curEl || !(DJ.mixing || (DJ.plan && DJ.plan.warm))) return;
+    if (DJ.plan && DJ.plan.bridge) djBridgeSettle(DJ.plan); else djAbort();  // a pause is no reason to give up a bridge: only the fade in progress ends at once
+  });
+  el.addEventListener('seeking', () => {
+    if (el !== curEl || !DJ.plan || !DJ.plan.warm) return;
+    if (DJ.plan.bridge) { if (DJ.plan.hand && DJ.plan.hand.phase === 'fade') djBridgeSettle(DJ.plan); } else if (!DJ.plan.started) djAbort();
+  });
 });
 elB.addEventListener('error', () => { if (elB !== curEl && DJ.plan && DJ.plan.warm) djAbort(); });
 elA.addEventListener('error', () => { if (elA !== curEl && DJ.plan && DJ.plan.warm) djAbort(); });
@@ -3689,6 +3892,7 @@ $('#fDjBtn').addEventListener('click', () => {
     ...styles.map(([k, l]) => ({ label: (DJ.style === k ? '✓ ' : '') + tr('Style: {name}', { name: l }), fn: () => { DJ.style = k; djSave(); syncDj(); } })),
     { label: tr('Crossfade length: {n} s', { n: DJ.fadeSec }), fn: () => { DJ.fadeSec = next[DJ.fadeSec] || 3; djSave(); toast(tr('Crossfade length: {n} s', { n: DJ.fadeSec })); } },
     { label: (DJ.fadeFallback ? '✓ ' : '') + tr('Crossfade songs that cannot be matched on the beat'), fn: () => { DJ.fadeFallback = !DJ.fadeFallback; djSave(); } },
+    ...(S.djBridge ? [{ label: (DJ.bridgeOn ? '✓ ' : '') + tr('Let the server make the transitions (sounds cleaner)'), fn: () => { DJ.bridgeOn = !DJ.bridgeOn; djSave(); } }] : []),
     { label: tr('Turn off DJ mode'), fn: () => djEnable(false), danger: true },
   ]);
 });

@@ -40,6 +40,7 @@ import db
 import devices
 import devsnapshot
 import devtools
+import djmix
 import enrich
 import homewidgets
 import i18n
@@ -1022,7 +1023,7 @@ def server_info():
         "name": APP_NAME,
         "version": VERSION_INFO["version"],
         "api_version": API_VERSION,
-        "functions": ["library", "search", "playlists", "likes", "history", "recommendations", "dj_analysis", "lyrics", "plugins"],
+        "functions": ["library", "search", "playlists", "likes", "history", "recommendations", "dj_analysis", "lyrics", "plugins"] + (["dj_bridge"] if djmix.available() else []),
         "login_methods": ["password"],
         "setup_required": db.count_users() == 0,
     }
@@ -1668,6 +1669,52 @@ async def bpm_info(video_id: str, duration: str = Query("", max_length=12), user
     return {"ready": True, "usable": res["conf"] >= BPM_MIN_CONF, **res}
 
 
+def _analysis_of(track_id: str, path: Path) -> dict | None:
+    """The stored analysis of a library song; made now if there is none (as DJ mode asks for it)."""
+    hit = db.get_bpm(track_id)
+    if hit and hit.get("ver", 1) >= bpmlib.ANALYSIS_VER:
+        return hit
+    res = _bpm_sync(path) or {"bpm": 0.0, "first_beat": 0.0, "conf": 0.0}
+    res.setdefault("ver", bpmlib.ANALYSIS_VER)
+    db.save_bpm(track_id, res)
+    return db.get_bpm(track_id)
+
+
+@api.get("/dj/bridge")
+async def dj_bridge(a: str = Query(max_length=64), b: str = Query(max_length=64), style: str = Query("auto", pattern="^(auto|blend|filter|echo|fade)$"),
+                    avoid: str = Query("", pattern="^(|blend|filter|echo)$")):
+    """The transition from song `a` into song `b`, made on the server (see djmix.py): the plan (times, style, stretch) and `url` of the audio file.
+    {"skip": true, "why"} if there is none (a plugin song, no usable tempo analysis, no room before the end): the player then does the transition itself."""
+    _check_id(a)
+    _check_id(b)
+    if a == b or plugins.is_plugin_id(a) or plugins.is_plugin_id(b):
+        return {"skip": True, "why": "only songs of the library can be mixed on the server"}
+    if not djmix.available():
+        return {"skip": True, "why": "bridges are turned off on this server"}
+    pa, pb = library.file_path(a), library.file_path(b)
+    if not pa or not pb:
+        raise HTTPException(404, tr("Track not found"))
+
+    def work() -> dict:
+        ia, ib = _analysis_of(a, pa), _analysis_of(b, pb)
+        with db.db() as c:
+            row = c.execute("SELECT duration FROM lib_tracks WHERE id = ?", (a,)).fetchone()
+        return djmix.make(a, b, pa, pb, ia or {}, ib or {}, float(row["duration"] if row else 0), style, avoid)
+
+    res = await asyncio.get_running_loop().run_in_executor(None, work)
+    if not res.get("skip"):
+        res["url"] = f"/api/dj/bridge/{res['key']}.m4a"
+    return res
+
+
+@api.get("/dj/bridge/{key}.m4a")
+def dj_bridge_file(key: str):
+    f = djmix.bridge_file(key)
+    if f is None:
+        raise HTTPException(404, tr("Track not found"))
+    return FileResponse(f, media_type="audio/mp4")  # Starlette serves Range requests
+
+
 BPM_MIN_CONF = 0.35
 ANALYZE_LIBRARY = os.environ.get("ANALYZE", "1") != "0"  # analyze new tracks in the background after a scan (tempo, key)
 _analysis_thread: threading.Thread | None = None
@@ -2131,13 +2178,9 @@ async def dev_analysis(track_id: str):
     path = library.file_path(track_id)
     if not path:
         raise HTTPException(404)
-    stored = db.get_bpm(track_id)
-    ran = False
-    if stored is None or stored.get("ver", 1) < bpmlib.ANALYSIS_VER:  # never analyzed (or by an older version): do it now, like DJ mode would
-        res = await asyncio.get_running_loop().run_in_executor(None, _bpm_sync, path) or {"bpm": 0.0, "first_beat": 0.0, "conf": 0.0}
-        res.setdefault("ver", bpmlib.ANALYSIS_VER)
-        db.save_bpm(track_id, res)
-        stored, ran = db.get_bpm(track_id), True
+    before = db.get_bpm(track_id)
+    stored = await asyncio.get_running_loop().run_in_executor(None, _analysis_of, track_id, path)  # never analyzed (or by an older version): done now, like DJ mode would
+    ran = stored != before
     curves = await asyncio.get_running_loop().run_in_executor(None, _curves_sync, path)
     return {"usable": True, "stored": stored, "analyzed_now": ran, "curves": curves, "min_conf": BPM_MIN_CONF, "analysis_version": bpmlib.ANALYSIS_VER}
 

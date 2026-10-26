@@ -26,6 +26,8 @@ Settings marked **admin area** can also be changed at runtime there, and the adm
 | `SCAN_ON_START` | `1` | `0` skips the scan at startup. |
 | `ANALYZE` | `1` | Analyze new tracks in the background (tempo, key, intro and outro) for DJ mode and the DJ fit. `0` = off. |
 | `DEVTOOLS` | `0` | `1` turns on the [developer tools](developer-guide.md#developer-tools) for admins: why a song is in the radio (the parts of its score), the plan of each DJ transition, the analysis curves, the home page seeds, calls to plugins, a fixed dice and a snapshot for bug reports. Meant for people working on the code. |
+| `DJ_BRIDGES` | `1` | `0` turns off the DJ transitions made by the server (the player then blends the songs itself). They need numpy and ffmpeg, like the analysis. |
+| `DJ_BRIDGE_MB` | `300` | How much room the finished transitions may take (about 0.4 MB each); the least recently used go first. Kept in `<data folder>/dj-bridges`, or in `DJ_BRIDGE_DIR`. |
 | `BEAT_ML` | `0` | `1` uses the optional `beat_this` model (needs PyTorch) for beat detection. Experimental. |
 | `ENRICH` | `1` | Fetch missing year, cover and artist description from MusicBrainz and the Cover Art Archive. `0` = off. **Admin area.** |
 | `LYRICS` | `1` | Look up lyrics at lrclib.net. `0` = off. |

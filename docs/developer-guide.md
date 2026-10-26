@@ -64,6 +64,7 @@ secure by default, and the core stays free of any third-party service.
 | `backup.py` | Backups to other places: the destinations (JSON in the settings), making a backup, keeping the last N, the schedule (`due`, `loop`), restoring from a destination. |
 | `backupdrivers.py` | The destination types: folder, S3 (own Signature V4, path style), WebDAV (httpx), FTP/FTPS (ftplib), SFTP (paramiko). Each has `test`, `put`, `list`, `get`, `delete`; `types()` describes their fields and the admin page draws its form from that. Add a type: a class, an entry in `types()` and `make()`, tests like `tests/test_backupdrivers.py`. |
 | `bpm.py` | Tempo, beat grid, key and intro/outro analysis for DJ mode (ffmpeg + numpy). |
+| `djmix.py` | DJ bridges: the plan of a transition between two library songs, lining them up, mixing with the effect and the file (ffmpeg + numpy), and the cache of finished bridges. |
 | `enrich.py` | Year, cover and artist description from MusicBrainz and the Cover Art Archive. |
 | `plugins.py` | The core's view of plugins: registry, calls to a plugin's HTTP API, ID prefixing, caching. |
 | `pluginhost.py` | Managed plugins: install (git/ZIP), virtual environment, child process, restart, update check, per-plugin log. |
@@ -181,6 +182,8 @@ Keep SQL here and out of `main.py`. All queries are parameterized.
 Search is word-prefix based, ignores case and accents.
 
 **`autolists.py`** computes lists on request from plays, likes and the library. Nothing is stored. "Mixes stay stable per day" works by seeding the shuffle with user, list and date.
+
+**`djmix.py`** makes the *bridge* of a DJ transition: `plan` (a port of the player's old `djPlan`, in Python so that it can be tested) chooses the style, the stretch and where the transition sits on the beat grids; `render` cuts the end of the old song and the start of the new one out of the files, compares their drum onsets (`align_offset`) to correct what the analysis got wrong by a few milliseconds, stretches the new song, applies the effect (`mix_pieces`: bass swap, filter sweep with a moving cutoff, echo) and writes one AAC file. The file *begins with the old song untouched* (`LEAD` seconds) and *ends with the new song* (`TAIL` seconds): the player fades over to it and back at those places, where both files carry the same music, so a small difference in timing is not heard. `GET /api/dj/bridge?a=&b=` answers with the plan and `url`, or `{"skip": true, "why"}`; the player (`DJ bridges` section of `app.js`) then makes the transition itself. Bridges are cached by a hash of the two files, the plan and `RENDER_VERSION` (raise it when the sound changes). `python tools/render_bridge.py old.mp3 new.mp3 out.m4a` makes one from two files to listen to.
 
 **`bpm.py`**: decodes audio with ffmpeg, estimates tempo and beat grid with numpy, derives the Camelot key, intro end and outro start. Results are cached in the `bpm` table. `ANALYZE=1` queues new tracks after each scan, one at a time.
 

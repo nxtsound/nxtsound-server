@@ -135,6 +135,7 @@
   function finish(e) {
     const pl = e.plan;
     e.state = pl.skip ? 'skipped' : !pl.started ? 'dropped'
+      : pl.bridge ? (pl.switched ? 'done' : 'aborted')
       : (pl.switched && pl.t0 && performance.now() - pl.t0 >= pl.mixSec * 950) ? 'done' : 'aborted';  // the player empties DJ.plan when it is over, and also when it gives up
   }
 
@@ -142,6 +143,7 @@
   function sampleMix() {
     const p = lastPlan, e = lastEntry;
     if (!p || !e || !p.started || p.skip || typeof curEl === 'undefined') return;
+    if (p.bridge) { e.m = e.m || { phase: [], rateMin: 9, rateMax: 0, stalls: 0, lagMs: null }; return; }  // the server lined it up: nothing to measure here
     const ea = p.switched ? otherEl() : curEl, eb = p.switched ? curEl : otherEl();
     const m = e.m || (e.m = { phase: [], rateMin: 9, rateMax: 0, stalls: 0, lagMs: null });
     if (m.lagMs === null) m.lagMs = Math.round((ea.currentTime - p.tA) * 1000);
@@ -176,6 +178,7 @@
       if (mx > PHASE_BAD_MS) bump(2, `beats ${Math.round(mx)} ms apart (9 in 10 samples below)`);
       else if (mx > PHASE_WARN_MS) bump(1, `beats ${Math.round(mx)} ms apart (9 in 10 samples below)`);
     }
+    if (e.plan.bridge && e.plan.align && e.plan.align.strength < 0.15) bump(1, 'the server found no clear beat to line the pieces up on');
     if (m && m.lagMs !== null && m.lagMs > LAG_WARN_MS) bump(1, `started ${m.lagMs} ms late`);
     if (e.reaction === 'left') bump(2, `the listener left within ${REACT_S} s`);
     if (!why.length) why.push(e.state === 'done' ? 'nothing to complain about' : 'not finished yet');
@@ -235,6 +238,7 @@
       rows.push(row('starts at', `${f1(p.tA)} s of the old song`));
     }
     const v = verdict(e), m = e.m;
+    if (p.bridge) rows.unshift(row('made by', `<b>the server</b>: a ${f1(p.dur)} s file, the pieces lined up to the sample${p.align ? ` (corrected by ${f1(p.align.ms)} ms after comparing the drums, ${Math.round(p.align.strength * 100)} % sure)` : ''}`));
     const res = [row('result', `<span class="light l${v.level}"></span>${esc(v.why.join('; '))}`)];
     if (m && m.phase.length) res.push(row('beats apart', `${Math.round(m.phase.reduce((a, b) => a + b, 0) / m.phase.length)} ms on average, ${Math.round(p90(m.phase))} ms at the 90th percentile, ${Math.round(Math.max(...m.phase))} ms at most (${m.phase.length} samples)`));
     if (m && m.rateMax > 0) res.push(row('speed', `${(m.rateMin * 100).toFixed(1)} to ${(m.rateMax * 100).toFixed(1)} % (the new song)`));
@@ -443,8 +447,8 @@
     setInterval(() => { if (open && tab === 'plugins') loadPluginCalls(); }, 3000);
     setInterval(watchDj, 400);  // the plan of a transition is made by the player, here it is only watched
     setInterval(sampleMix, 100);  // finer while a transition runs: the beats of the two songs
-    [elA, elB].forEach((el) => el.addEventListener('waiting', () => {
-      if (lastEntry && lastPlan && lastPlan.started && lastEntry.m) lastEntry.m.stalls++;
+    [elA, elB].forEach((el) => el.addEventListener('waiting', () => {  // only the element that is heard counts, and not while it is being moved
+      if (el === curEl && !el.seeking && lastEntry && lastPlan && lastPlan.started && lastEntry.m) lastEntry.m.stalls++;
     }));
   }
 

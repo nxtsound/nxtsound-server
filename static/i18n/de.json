@@ -816,5 +816,6 @@
  "{where}: '{key}' is required (a non-empty text).": "{where}: '{key}' ist erforderlich (ein nicht leerer Text).",
  "“{name}” added": "„{name}“ hinzugefügt",
  "“{name}” installed, setting up": "„{name}“ installiert, wird eingerichtet",
- "“{title}” will no longer be recommended": "„{title}“ wird nicht mehr empfohlen"
+ "“{title}” will no longer be recommended": "„{title}“ wird nicht mehr empfohlen",
+ "Let the server make the transitions (sounds cleaner)": "Übergänge vom Server mischen lassen (klingt sauberer)"
 }
