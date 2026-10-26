@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 import httpx
 
 import db
+import devtools
 import i18n
 import pluginproto
 from i18n import tr
@@ -101,14 +102,17 @@ def _call(plugin_id: str, path: str, params: dict | None = None, timeout: float 
     p = get(plugin_id)
     if not p or not p["enabled"]:
         raise PluginError("Plugin not available")
+    t0 = time.perf_counter()
     try:
         with _client(plugin_id, p["url"], _token(plugin_id)) as c:
             r = c.request(method, path, params=params, **({"json": body} if body is not None else {}), **({"timeout": timeout} if timeout else {}))
     except httpx.HTTPError as e:
+        devtools.record_call(plugin_id, method, path, params, "error", (time.perf_counter() - t0) * 1000, error=_describe(e))
         # A deliberately short limit (search suggestions) running out is normal for a slow source, not a plugin fault.
         if not (timeout and isinstance(e, httpx.TimeoutException)):
             _note(plugin_id, _describe(e))
         raise PluginError("unreachable: {kind}", kind=e.__class__.__name__) from e
+    devtools.record_call(plugin_id, method, path, params, r.status_code, (time.perf_counter() - t0) * 1000, size=len(r.content), preview=r.text)
     if r.status_code == 404:
         raise PluginError("not found")
     if r.status_code not in (200, 202):

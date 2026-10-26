@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import random
 import subprocess
 import shutil
 import tempfile
@@ -37,6 +38,7 @@ import backup
 import backupdrivers
 import db
 import devices
+import devsnapshot
 import devtools
 import enrich
 import homewidgets
@@ -1053,9 +1055,11 @@ async def search(q: str = Query(min_length=1, max_length=200), kind: str = "song
 
 
 @api.get("/radio/{track_id}")
-async def radio(track_id: str, limit: int = Query(40, ge=1, le=100), dj: bool = False, debug: bool = False, user: dict = Depends(current_user)):
+async def radio(track_id: str, limit: int = Query(40, ge=1, le=100), dj: bool = False, debug: bool = False, rng: int | None = None,
+                user: dict = Depends(current_user)):
     """Similar tracks; with dj=1 ordered so that tempo and key of consecutive tracks fit (as far as analyzed).
-    debug=1 adds "dev" (why each track is there) for admins on a server with DEVTOOLS=1; for everyone else it changes nothing."""
+    debug=1 adds "dev" (why each track is there) for admins on a server with DEVTOOLS=1; rng=<number> fixes the dice roll so that the
+    list can be repeated. For everyone else both change nothing."""
     _check_id(track_id)
     explain = debug and devtools.active(user)
     blocked = await asyncio.to_thread(db.blocked_sets, user["id"])
@@ -1067,7 +1071,7 @@ async def radio(track_id: str, limit: int = Query(40, ge=1, le=100), dj: bool = 
         if explain:  # the plugin decides what is similar; the server only knows the order
             found = [{**t, "dev": {"kind": "plugin", "seed": track_id, "rank": i}} for i, t in enumerate(found, 1)]
         return {"tracks": found}
-    tracks = _allowed(await asyncio.to_thread(library.similar, track_id, limit, explain), blocked)
+    tracks = _allowed(await asyncio.to_thread(library.similar, track_id, limit, explain, devtools.rng(user, rng) or random), blocked)
     if dj:
         tracks = await asyncio.to_thread(library.dj_order, tracks, track_id)
     return {"tracks": tracks}
@@ -1515,9 +1519,12 @@ async def auto_index(user: dict = Depends(current_user)):
 
 
 @api.get("/auto/{lid:path}")
-async def auto_get(lid: str, user: dict = Depends(current_user)):
+async def auto_get(lid: str, debug: bool = False, day: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"), user: dict = Depends(current_user)):
+    """A list of "For you". debug=1 adds "dev" to each track (why it is in the list) and day=YYYY-MM-DD shuffles the way the list was shuffled on that day;
+    both only for admins on a server with DEVTOOLS=1."""
     blocked = await asyncio.to_thread(db.blocked_sets, user["id"])
-    res = await asyncio.to_thread(autolists.get, user["id"], lid, lambda t: _allowed(t, blocked))
+    dev = devtools.active(user)
+    res = await asyncio.to_thread(autolists.get, user["id"], lid, lambda t: _allowed(t, blocked), day if dev else None, debug and dev)
     if not res:
         raise HTTPException(404, tr("List not found"))
     return res
@@ -1796,15 +1803,18 @@ def _allowed(tracks: list[dict], blocked: tuple[set[str], set[str]]) -> list[dic
 
 
 @api.get("/home")
-async def home(refresh: int = 0, tz: int = Query(0, ge=-840, le=840), user: dict = Depends(current_user)):
+async def home(refresh: int = 0, tz: int = Query(0, ge=-840, le=840), debug: bool = False, rng: int | None = None, user: dict = Depends(current_user)):
     """The home page: the widgets of the user's layout with their data. tz: minutes the user's clock is ahead of UTC (for times of day)."""
     uid = user["id"]
     layout, custom, _ = homewidgets.layout_of(uid)
     if not await asyncio.to_thread(db.latest_play_id, uid) and not any(e["type"] == "discover" for e in layout):
         layout = layout + [{"id": "discover", "type": "discover", "opts": {"count": 12}}]  # nothing listened to yet: at least a random selection
     blocked = await asyncio.to_thread(db.blocked_sets, uid)
-    widgets = await homewidgets.build(uid, layout, tz, lambda tracks: _allowed(tracks, blocked), _friends, bool(refresh))
+    dev = {} if debug and devtools.active(user) else None  # developer tools: what the page was made of
+    widgets = await homewidgets.build(uid, layout, tz, lambda tracks: _allowed(tracks, blocked), _friends, bool(refresh), dev, devtools.rng(user, rng) or random)
     out = {"empty": not widgets, "widgets": widgets, "custom": custom}
+    if dev is not None:
+        out["dev"] = dev
     if db.community_enabled():
         out["community"] = {"enabled": True, "following": len(db.following_ids(uid))}
     return out
@@ -2095,8 +2105,54 @@ class NoCacheStatic(StaticFiles):
         return resp
 
 
+# ---------- Developer tools (DEVTOOLS=1, admins only) ----------
+
+def dev_user(user: dict = Depends(current_user)) -> dict:
+    """These routes do not exist for anyone else (404, not 403: nobody has to learn that the tools are there)."""
+    if not devtools.active(user):
+        raise HTTPException(404)
+    return user
+
+
+dev_api = APIRouter(prefix="/api/dev", dependencies=[Depends(dev_user)])
+
+
+def _curves_sync(path: Path) -> dict | None:
+    with _bpm_sem:
+        return bpmlib.curves(path)
+
+
+@dev_api.get("/analysis/{track_id}")
+async def dev_analysis(track_id: str):
+    """What the tempo analysis stored for a track and the curves it looks at (loudness, onsets), to see why it decided as it did."""
+    _check_id(track_id)
+    if plugins.is_plugin_id(track_id) or not bpmlib.available():
+        return {"usable": False, "reason": "plugin song (not analyzed)" if plugins.is_plugin_id(track_id) else "numpy is not installed"}
+    path = library.file_path(track_id)
+    if not path:
+        raise HTTPException(404)
+    curves = await asyncio.get_running_loop().run_in_executor(None, _curves_sync, path)
+    return {"usable": True, "stored": db.get_bpm(track_id), "curves": curves, "min_conf": BPM_MIN_CONF, "analysis_version": bpmlib.ANALYSIS_VER}
+
+
+@dev_api.get("/plugin-calls")
+def dev_plugin_calls():
+    """The latest calls to plugins (all users' actions, like the access log): path, parameters, status, time, the start of the answer."""
+    return {"calls": devtools.calls()}
+
+
+@dev_api.get("/export")
+def dev_export(user: dict = Depends(dev_user)):
+    """A snapshot of the data recommendations are made from, with every name replaced (see devsnapshot.py). For bug reports."""
+    data = devsnapshot.export(user["id"])
+    data["server_version"] = VERSION_INFO["version"]
+    return Response(json.dumps(data, ensure_ascii=False), media_type="application/json",
+                    headers={"Content-Disposition": 'attachment; filename="nxtsound-snapshot.json"'})
+
+
 app.include_router(api)
 app.include_router(admin)
+app.include_router(dev_api)
 
 # mount the frontend last, otherwise it swallows the API routes
 app.mount("/", NoCacheStatic(directory=BASE / "static", html=True), name="static")

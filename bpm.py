@@ -232,3 +232,32 @@ def _beat_grid(env: "np.ndarray") -> dict | None:
     bpm = best[1]
     ph = (ph + PHASE_FIX) % (60.0 / bpm)  # window offset: the flux peak lies before the actual beat
     return {"bpm": round(bpm, 2), "first_beat": round(ph, 3), "conf": round(conf, 2)}
+
+
+def _thin(a: "np.ndarray", points: int) -> list[float]:
+    """At most `points` values (the largest of each stretch), scaled to 0..1, for drawing."""
+    if len(a) == 0:
+        return []
+    if len(a) > points:
+        edges = np.linspace(0, len(a), points + 1).astype(int)
+        a = np.array([a[i:j].max() if j > i else 0.0 for i, j in zip(edges[:-1], edges[1:])])
+    top = float(a.max()) or 1.0
+    return [round(float(v) / top, 3) for v in a]
+
+
+def curves(path: Path, points: int = 600) -> dict | None:
+    """For the developer tools: the curves the analysis looks at, thinned out so that they can be drawn.
+    -> {"seconds", "loudness" (per `loudness_step` seconds), "onset" (per `onset_step` seconds, only the part that is analyzed)} or None."""
+    if np is None:
+        return None
+    try:
+        x = _decode(path)
+    except (subprocess.SubprocessError, OSError, ValueError):
+        return None
+    w = SR // 2
+    n = len(x) // w
+    loud = np.sqrt((x[: n * w].reshape(n, w) ** 2).mean(axis=1)) if n else np.zeros(0)
+    env = _onset_envelope(x[: ANALYZE_SECONDS * SR])
+    loud_pts, env_pts = _thin(loud, points), _thin(env, points)
+    return {"seconds": round(len(x) / SR, 1), "loudness": loud_pts, "loudness_step": round(0.5 * len(loud) / max(1, len(loud_pts)), 3),
+            "onset": env_pts, "onset_step": round(len(env) * HOP / SR / max(1, len(env_pts)), 3)}

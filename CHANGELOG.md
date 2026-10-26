@@ -6,7 +6,7 @@ minor versions may contain breaking changes, which are called out.
 ## [Unreleased]
 
 ### Added
-- **Developer tools** (`DEVTOOLS=1`, admins only, off by default): a *DEV* button in the header opens a panel with the requests and their timings, and every song of a radio shows the score it was chosen with, split into its parts (artist, album, genre, year, tempo and key fit, dice roll). See the developer guide.
+- **Developer tools** (`DEVTOOLS=1`, admins only, off by default): a *DEV* button in the header opens a panel. Every song of a radio shows the score it was chosen with, split into its parts; the lists under *For you* say why a song is in them; the DJ tab shows the plan of each transition; the Analysis tab draws what the tempo analysis saw; the Home tab shows the seeds, the cache and the time per widget; the Plugins tab lists the calls to plugins. A fixed dice repeats a radio or mix, and a snapshot with every name replaced can be attached to a bug report and loaded with `tools/load_snapshot.py`. See the developer guide.
 
 ## [0.3.1] – 2026-10-23
 

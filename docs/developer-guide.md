@@ -57,7 +57,8 @@ secure by default, and the core stays free of any third-party service.
 | `autolists.py` | The computed "For you" lists. |
 | `loginalerts.py` | Login alerts: remembers each login (`login_history`) and, if its device or network is new for the user and the first one is long past, leaves a bell message. |
 | `playerhub.py` | Remote control: every visible page and every player with a queue keeps a server-sent-events stream (`GET /api/player/events`); players with a queue publish their state (`POST /api/player/state`). The stream pushes the list of the other devices when it changes (`devices` event: who plays what; the header dot follows it) and delivers commands (`POST /api/player/command`). `GET /api/player/devices` gives the same list on demand. In memory, one server process. |
-| `devtools.py` | The switch for the developer tools (`DEVTOOLS=1`, admins only). |
+| `devtools.py` | The switch for the developer tools (`DEVTOOLS=1`, admins only), the fixed dice and the list of plugin calls. |
+| `devsnapshot.py` | The snapshot of the data recommendations are made from (names replaced) and loading it into a development instance. |
 | `devices.py` | Browser and system from a User-Agent, for the list of a user's devices (logins). |
 | `homewidgets.py` | The home page: catalog of widgets with their options, the default layout, checking a saved layout, building each widget's data. Add a widget: a spec in `specs()`, a builder in `_BUILDERS`, a view in `widgetHtml()` (`app.js`). |
 | `backup.py` | Backups to other places: the destinations (JSON in the settings), making a backup, keeping the last N, the schedule (`due`, `loop`), restoring from a destination. |
@@ -242,16 +243,24 @@ When you add UI: escape everything, add `tr()` to every visible string, test on 
 
 Start the server with `DEVTOOLS=1` and sign in as an admin: a small **DEV** button appears in the header. It opens a panel with
 
-- **Queue**: for every song of a radio the score it was chosen with, split into its parts (same artist, album, genre, year, tempo and key fit, dice roll). Tap the number on a queue row, or choose *Why this song? (developer)* in its menu, for the full explanation: the rank among all candidates and how far above the cut-off it was.
+- **Queue**: for every song of a radio the score it was chosen with, split into its parts (same artist, album, genre, year, tempo and key fit, dice roll). Tap the number on a queue row, or choose *Why this song? (developer)* in its menu, for the full explanation: the rank among all candidates and how far above the cut-off it was. The lists under *For you* show why a song is in them (play counts, genre, year, added).
+- **DJ**: the plan of every transition (style and why, tempo and whether it locked, key fit, bars or beats, length, where it starts in the old song, a timeline) and how it went (planned, warming, mixing, done, dropped, skipped with the reason).
+- **Analysis**: for the current song the curves the tempo analysis looks at (loudness, onsets) with the beats, bars, intro end, outro start and end drawn on top, and the stored values.
+- **Home**: the seeds of *Your Mix* and *Because you listened to* with their scores, whether the similar songs came from the cache, and the time each widget took.
+- **Plugins**: the calls of the server to plugins (path, parameters, status, time, the start of the answer).
 - **Requests**: the last calls to the API with status and duration, as the browser saw them.
+- **Dice** (footer): a number fixes the dice roll of the radio and of *Your Mix*, so the same request gives the same list. Empty = real dice.
+- **Snapshot** (footer): downloads the data recommendations are made from, with every name replaced, for a bug report. Load it into your own development instance with `DB_PATH=./dev/server.db python tools/load_snapshot.py nxtsound-snapshot.json --user dev --password …`: the songs have no audio, but radio, mixes and the home page give what the reporter saw. Look at the file before attaching it to a public issue: genres, years, durations and the times of plays are kept, the names are not.
 
 How it works, so you can add to it:
 
 - `devtools.py` holds the switch. `devtools.active(user)` is true only with `DEVTOOLS=1` **and** an admin. Every route that hands out developer information asks it itself; hiding the panel in the page is not a protection. `GET /api/me` includes `"devtools": true` only then.
 - The explanation comes from the code that makes the decision, not from a second copy of it: `library.similar(..., explain=True)` returns the same ranking and adds a `dev` object to each track. A test checks that the parts add up to the score. Do the same for new decisions (return the parts, keep one place that computes them).
-- Ask for it with `?debug=1` (`GET /api/radio/{id}` does). Without the flag, or for anyone else, the answer is exactly the normal one.
+- Ask for it with `?debug=1` (`/api/radio/{id}`, `/api/home`, `/api/auto/{id}` do). Without the flag, or for anyone else, the answer is exactly the normal one. `?rng=<number>` (radio, home) and `?day=YYYY-MM-DD` (lists) repeat a random choice; they are ignored for everyone else.
+- `/api/dev/*` (analysis curves, plugin calls, snapshot) answers 404 unless `devtools.active(user)`.
+- The DJ tab only *watches* `DJ.plan` of `app.js` (every 400 ms); the player does not know the panel exists. Reasons for a skipped plan are the `why` of `djPlan`.
 - The page loads `static/devtools.js` only when `/api/me` says so; normal users never download it. It is English only on purpose and does not use `tr()`.
-- Never put secrets or other users' data into a `dev` object. It is shown to an admin about *their own* session.
+- Never put secrets or other users' data into a `dev` object. It is shown to an admin about *their own* session. The one exception is the plugin calls, which are the server's and not a user's, like the access log; bodies of calls are not kept and answers to settings calls are left out.
 
 ## Translations
 

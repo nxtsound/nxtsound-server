@@ -25,7 +25,7 @@ Settings marked **admin area** can also be changed at runtime there, and the adm
 | `SCAN_MINUTES` | `0` (Docker) | `0` = scan at startup and with the admin button only; otherwise rescan every N minutes. |
 | `SCAN_ON_START` | `1` | `0` skips the scan at startup. |
 | `ANALYZE` | `1` | Analyze new tracks in the background (tempo, key, intro and outro) for DJ mode and the DJ fit. `0` = off. |
-| `DEVTOOLS` | `0` | `1` turns on the [developer tools](developer-guide.md#developer-tools) for admins: why a song is in the radio (the parts of its score) and a panel with the requests and their timings. Meant for people working on the code. |
+| `DEVTOOLS` | `0` | `1` turns on the [developer tools](developer-guide.md#developer-tools) for admins: why a song is in the radio (the parts of its score), the plan of each DJ transition, the analysis curves, the home page seeds, calls to plugins, a fixed dice and a snapshot for bug reports. Meant for people working on the code. |
 | `BEAT_ML` | `0` | `1` uses the optional `beat_this` model (needs PyTorch) for beat detection. Experimental. |
 | `ENRICH` | `1` | Fetch missing year, cover and artist description from MusicBrainz and the Cover Art Archive. `0` = off. **Admin area.** |
 | `LYRICS` | `1` | Look up lyrics at lrclib.net. `0` = off. |

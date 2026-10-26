@@ -5,6 +5,7 @@ Texts are translated when they are asked for, so the catalog and the widgets com
 (no history yet, no likes, community off) are simply left out of the answer."""
 import asyncio
 import json
+import random
 import re
 import secrets
 import time
@@ -144,8 +145,9 @@ SIMILAR_TTL = 900
 class _Build:
     """Things several widgets need are worked out once per home page, and only if a widget asks."""
 
-    def __init__(self, user_id: int, tz: int, allowed: Allowed, refresh: bool, seeds: int):
+    def __init__(self, user_id: int, tz: int, allowed: Allowed, refresh: bool, seeds: int, dev: dict | None = None, dice=random):
         self.uid, self.tz, self.allowed, self.refresh, self.need_seeds = user_id, tz, allowed, refresh, seeds
+        self.dev, self.dice = dev, dice  # developer tools: where to note what happened; the dice (a fixed one repeats a mix)
         self._recent: list[dict] | None = None
         self._similar: tuple[list[dict], list[list[dict]]] | None = None
         self._lists: list[dict] | None = None
@@ -160,7 +162,7 @@ class _Build:
 
     async def recent(self) -> list[dict]:
         if self._recent is None:
-            self._candidates = await asyncio.to_thread(db.seed_candidates, self.uid, 6)
+            self._candidates = await asyncio.to_thread(db.seed_candidates, self.uid, 6, self.dev is not None)
             recent = await asyncio.to_thread(db.recent_tracks, self.uid, 20)
             ids = [t["id"] for t in recent + self._candidates]
             ok = (await asyncio.to_thread(library.existing, ids)) | {i for i in ids if plugins.is_enabled_id(i)}
@@ -177,9 +179,13 @@ class _Build:
             await self.recent()
             latest = await asyncio.to_thread(db.latest_play_id, self.uid)
             hit = _similar_cache.get(self.uid)
-            if not self.refresh and hit and hit[0] == latest and time.time() - hit[1] < SIMILAR_TTL and hit[2] >= self.need_seeds:
+            if not self.refresh and self.dice is random and hit and hit[0] == latest and time.time() - hit[1] < SIMILAR_TTL and hit[2] >= self.need_seeds:
                 self._similar = (hit[3], hit[4])
+                if self.dev is not None:
+                    self.dev["similar"] = {"cache": "hit", "age_s": round(time.time() - hit[1])}
             else:
+                if self.dev is not None:
+                    self.dev["similar"] = {"cache": "refresh" if self.refresh else "fixed dice" if self.dice is not random else "miss"}
                 blocked = await asyncio.to_thread(db.blocked_sets, self.uid)
                 seeds = [s for s in self._candidates if s["id"] in self._alive_ids and self.allowed([s])][: self.need_seeds]
 
@@ -189,12 +195,16 @@ class _Build:
                             return await asyncio.to_thread(plugins.radio, seed["id"], 30)
                         except plugins.PluginError:
                             return []
-                    return await asyncio.to_thread(library.similar, seed["id"], 30)
+                    return await asyncio.to_thread(library.similar, seed["id"], 30, False, self.dice)
 
                 results = [self.allowed(r) for r in await asyncio.gather(*(similar_to(s) for s in seeds))]
                 known = await self.known()
                 self._similar = (seeds, [[t for t in r if t["id"] not in known] for r in results])
-                _similar_cache[self.uid] = (latest, time.time(), self.need_seeds, *self._similar)
+                if self.dice is random:  # a mix made with a fixed dice is not remembered for the next visit
+                    _similar_cache[self.uid] = (latest, time.time(), self.need_seeds, *self._similar)
+            if self.dev is not None:
+                self.dev["seeds"] = [{"title": s["title"], "artist": s["artist"], **(s.get("dev") or {})} for s in self._similar[0]]
+                self.dev["similar"]["counts"] = [len(x) for x in self._similar[1]]
         return self._similar
 
     async def lists(self) -> list[dict]:
@@ -356,10 +366,12 @@ _BUILDERS: dict[str, Callable[[_Build, dict, dict], Awaitable]] = {
 }
 
 
-async def build(user_id: int, layout: list[dict], tz: int, allowed: Allowed, friends: Callable[[int], Awaitable[list[dict]]], refresh: bool = False) -> list[dict]:
-    """The widgets of a layout with their data, in the layout's order. Widgets without content are left out."""
+async def build(user_id: int, layout: list[dict], tz: int, allowed: Allowed, friends: Callable[[int], Awaitable[list[dict]]], refresh: bool = False,
+                dev: dict | None = None, dice=random) -> list[dict]:
+    """The widgets of a layout with their data, in the layout's order. Widgets without content are left out.
+    dev (a dict) is filled with what happened, for the developer tools: seeds, cache, time per widget."""
     seeds = max([3] + [e["opts"].get("rows", 1) for e in layout if e["type"] == "because"])
-    b = _Build(user_id, tz, allowed, refresh, seeds)
+    b = _Build(user_id, tz, allowed, refresh, seeds, dev, dice)
     b.friends = lambda: friends(user_id)
     b.has_new = any(e["type"] == "new" for e in layout)
     builders = dict(_BUILDERS)
@@ -367,10 +379,15 @@ async def build(user_id: int, layout: list[dict], tz: int, allowed: Allowed, fri
     builders["decades"] = _tiles(tr("Decades"), "decade:")
     builders["artistmix"] = _tiles(tr("Artist mixes"), "artist:")
     out: list[dict] = []
+    timings = []
     for e in layout:
+        t0 = time.perf_counter()
         res = await builders[e["type"]](b, e, e["opts"])
+        timings.append({"id": e["id"], "type": e["type"], "ms": round((time.perf_counter() - t0) * 1000, 1), "shown": bool(res)})
         if res:
             out.extend(res if isinstance(res, list) else [res])
+    if dev is not None:
+        dev["widgets"] = timings
     return out
 
 

@@ -832,17 +832,25 @@ def _last_plays(user_id: int, n: int = 300) -> list[dict]:
     return [_track(r) for r in rows]
 
 
-def seed_candidates(user_id: int, n: int = 3) -> list[dict]:
-    """Songs that recommendations are built from: played often and recently, preferably by different artists."""
+def seed_candidates(user_id: int, n: int = 3, explain: bool = False) -> list[dict]:
+    """Songs that recommendations are built from: played often and recently, preferably by different artists.
+    explain=True adds "dev" (score, how often in the last plays, liked) to each song for the developer tools."""
     scores: dict[str, float] = {}
     first: dict[str, dict] = {}
+    plays: dict[str, int] = {}
+    liked: set[str] = set()
     for i, t in enumerate(_last_plays(user_id)):  # i = 0 is the most recent play
         scores[t["id"]] = scores.get(t["id"], 0.0) + 1.0 / (1.0 + i / 15.0)
+        plays[t["id"]] = plays.get(t["id"], 0) + 1
         first.setdefault(t["id"], t)
     for t in list_likes(user_id, 50):  # likes give a fixed bonus
         scores[t["id"]] = scores.get(t["id"], 0.0) + 1.5
+        liked.add(t["id"])
         first.setdefault(t["id"], t)
     ranked = sorted(scores, key=lambda vid: -scores[vid])
+    if explain:
+        for vid, t in first.items():
+            t["dev"] = {"kind": "seed", "score": round(scores[vid], 2), "plays": plays.get(vid, 0), "liked": vid in liked}
     picked: list[dict] = []
     seen_artists: set[str] = set()
     for vid in ranked:

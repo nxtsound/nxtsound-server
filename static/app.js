@@ -549,7 +549,8 @@ async function renderHome(my, refresh = false) {
   setTab('home');
   const view = $('#view');
   if (!refresh) view.innerHTML = skeleton();
-  const d = await api('/home?tz=' + -new Date().getTimezoneOffset() + (refresh ? '&refresh=1' : ''), {}, 60000);
+  const d = await api('/home?tz=' + -new Date().getTimezoneOffset() + (refresh ? '&refresh=1' : '') + devParams().map((x) => '&' + x).join(''), {}, 60000);
+  if (window.DEV && d.dev) DEV.home(d.dev);
   if (my !== S.nav) return;
   const customize = `<div class="actions homeedit"><button class="btn sec" data-nav="#/home/edit">${esc(tr('Customize home'))}</button></div>`;
   if (d.empty) {
@@ -759,7 +760,7 @@ async function viewAuto(my, id) {
   setTab('playlists');
   const view = $('#view');
   view.innerHTML = loading();
-  const p = await api('/auto/' + encodeURIComponent(id));
+  const p = await api('/auto/' + encodeURIComponent(id) + (S.devtools ? '?debug=1' : ''));
   if (my !== S.nav) return;
   resetLists();
   setList('auto', p.tracks);
@@ -2106,7 +2107,9 @@ function playFromList(key, i) {
   playList(list, i);
 }
 
-const radioQuery = () => { const q = [DJ.on && 'dj=1', S.devtools && 'debug=1'].filter(Boolean).join('&'); return q ? '?' + q : ''; };
+// Developer tools: ask the server to explain itself, and (if the panel has a fixed dice) to roll the same every time
+const devParams = () => (S.devtools ? ['debug=1', S.devRng !== undefined && 'rng=' + S.devRng].filter(Boolean) : []);
+const radioQuery = () => { const q = [DJ.on && 'dj=1', ...devParams()].join('&'); return q ? '?' + q : ''; };
 
 async function startRadio(track) {
   toast(tr('Starting radio …'));
@@ -3464,7 +3467,7 @@ function djPickStyle(lock, ctx = {}) {
 }
 
 function djPlan(nt, a, b, dur) {
-  if (!a.usable || !b.usable) return { skip: true };
+  if (!a.usable || !b.usable) return { skip: true, why: `${a.usable ? 'the next song' : 'this song'} has no usable tempo analysis` };
   let bb = b.bpm;  // bring B's tempo to the same octave as A (e.g. 70 instead of 140)
   [b.bpm * 2, b.bpm / 2].forEach((c) => { if (Math.abs(Math.log(c / a.bpm)) < Math.abs(Math.log(bb / a.bpm))) bb = c; });
   let rate = a.bpm / bb;
@@ -3500,7 +3503,7 @@ function djPlan(nt, a, b, dur) {
   let tA = hasOutro ? onGrid(a.outro_start, true) : onGrid(latest, false);
   if (tA > latest) tA = onGrid(latest, false);
   if (tA - audio.currentTime < DJ.warmSec + 1) tA = onGrid(audio.currentTime + DJ.warmSec + 1, true);  // outro is already running: next bar
-  if (tA > latest + 0.01) return { skip: true };
+  if (tA > latest + 0.01) return { skip: true, why: 'the song ends before a transition on the beat fits' };
   return { id: nt.id, style, lock, rate, tA, mixSec, beatA, fbA: fA, fbB: fB, bpmB: bb, X, warm: false, started: false, switched: false, info: { fit, hot, hasOutro, bars, mb } };
 }
 
@@ -3509,7 +3512,7 @@ function djPlanFade(nt, a, dur) {
   const endA = Math.min(dur, (a && a.audio_end) || dur) - 0.5;  // without the silence at the end, if the analysis knows it
   const mixSec = Math.min(DJ.fadeSec, Math.max(2, (dur - 5) / 4));
   const tA = endA - mixSec;
-  if (tA - audio.currentTime < DJ.warmSec + 1) return { skip: true };  // too late for this one (a seek near the end, a very short song)
+  if (tA - audio.currentTime < DJ.warmSec + 1) return { skip: true, why: 'too late for a fade (a jump near the end, or a very short song)' };  // too late for this one
   return { id: nt.id, style: 'fade', fade: true, lock: false, rate: 1, tA, mixSec, beatA: 1, X: 0, warm: false, started: false, switched: false, info: {} };
 }
 
@@ -3905,7 +3908,7 @@ async function syncLang(user) {
   try {
     const r = await api('/me');
     await syncLang(r.user);
+    if (r.devtools) startDevtools();  // before the first page is built, so that its requests ask for the explanations too
     boot(r.user);
-    if (r.devtools) startDevtools();
   } catch (e) { if (e && e.status === 401) showLogin(); else showUnreachable(); }  // not logged in, or no connection to the server
 })();

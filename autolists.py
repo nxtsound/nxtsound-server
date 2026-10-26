@@ -3,6 +3,7 @@
 None of this is stored; the lists change with the listening behaviour. Mixes are stable per day
 (same user, same list, same day = same order).
 """
+import contextvars
 import random
 import time
 
@@ -16,8 +17,11 @@ MAX_TRACKS = 50
 FORGOTTEN_AFTER = 30 * 86400  # "Rediscover": not listened to for this long
 
 
+_DAY: contextvars.ContextVar[str | None] = contextvars.ContextVar("autolist_day", default=None)  # developer tools: pretend it is another day
+
+
 def _shuffled(user_id: int, lid: str, tracks: list[dict]) -> list[dict]:
-    rng = random.Random(f"{user_id}:{lid}:{time.strftime('%Y-%m-%d')}")
+    rng = random.Random(f"{user_id}:{lid}:{_DAY.get() or time.strftime('%Y-%m-%d')}")
     out = tracks[:]
     rng.shuffle(out)
     return out
@@ -157,8 +161,51 @@ def index(user_id: int, allowed=lambda tracks: tracks) -> list[dict]:
     return out
 
 
-def get(user_id: int, lid: str, allowed=lambda tracks: tracks) -> dict | None:
-    res = _resolve(user_id, lid)
+def _explain(user_id: int, lid: str, tracks: list[dict]) -> None:
+    """Developer tools: adds "dev" to each track, why it is in this list (what the list's rule saw about it)."""
+    ids = [t["id"] for t in tracks]
+    if not ids:
+        return
+    marks = ",".join("?" * len(ids))
+    with db.db() as c:
+        plays = {r["video_id"]: (r["n"], r["last"]) for r in c.execute(
+            f"SELECT video_id, COUNT(*) AS n, MAX(played_at) AS last FROM plays WHERE user_id = ? AND video_id IN ({marks}) GROUP BY video_id", [user_id, *ids])}
+        lib = {r["id"]: r for r in c.execute(f"SELECT id, genre, year, added, artist_id FROM lib_tracks WHERE id IN ({marks})", ids)}
+    kind, _, arg = lid.partition(":")
+    now = time.time()
+    for t in tracks:
+        n, last = plays.get(t["id"], (0, None))
+        row = lib.get(t["id"])
+        lines, label = [], kind
+        if kind in ("top", "rediscover"):
+            lines.append(f"played {n}×" + (f", last {round((now - last) / 86400)} days ago" if last else ""))
+            if kind == "rediscover":
+                lines.append("not played for at least 30 days" if last else "liked, but not played yet")
+            label = f"{n}×"
+        elif kind == "new" and row:
+            lines.append(f"added {time.strftime('%Y-%m-%d', time.localtime(row['added']))}")
+            label = "new"
+        elif kind == "genre" and row:
+            lines.append(f"genre is “{row['genre']}”")
+        elif kind == "decade" and row:
+            lines.append(f"year {row['year']} is in the {arg[:3]}0s")
+        elif kind == "artist":
+            own = bool(row) and row["artist_id"] == arg or t.get("artist_id") == arg
+            lines.append("by the artist" if own else "similar to the artist's most played song (library.similar)")
+            label = "own" if own else "sim"
+        t["dev"] = {"kind": "list", "list": lid, "label": label, "lines": lines}
+
+
+def get(user_id: int, lid: str, allowed=lambda tracks: tracks, day: str | None = None, explain: bool = False) -> dict | None:
+    """day (developer tools): the date the daily shuffle is made for, to repeat a mix of another day."""
+    token = _DAY.set(day)
+    try:
+        res = _resolve(user_id, lid)
+    finally:
+        _DAY.reset(token)
     if not res:
         return None
-    return {"id": lid, "name": res[0], "subtitle": res[1], "tracks": allowed(res[2])}
+    tracks = allowed(res[2])
+    if explain:
+        _explain(user_id, lid, tracks)
+    return {"id": lid, "name": res[0], "subtitle": res[1], "tracks": tracks}

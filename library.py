@@ -597,9 +597,9 @@ def dj_order(tracks: list[dict], seed_id: str) -> list[dict]:
     return out
 
 
-def _similarity(seed, r, dj: dict) -> dict:
+def _similarity(seed, r, dj: dict, dice=random) -> dict:
     """The parts a candidate's score is made of (see `similar`); `dj` is None when the pair is not analyzed."""
-    parts = {"random": random.random() * 2, "dj": None}
+    parts = {"random": dice.random() * 2, "dj": None}
     if seed["id"] in dj and r["id"] in dj:  # only where both are analyzed (DJ mode / background analysis)
         parts["dj"] = dj_affinity(dj[seed["id"]], dj[r["id"]]) * 0.8
     parts["artist"] = 3 if r["artist_id"] == seed["artist_id"] else 0
@@ -612,10 +612,11 @@ def _similarity(seed, r, dj: dict) -> dict:
     return parts
 
 
-def similar(seed_id: str, limit: int = 40, explain: bool = False) -> list[dict]:
+def similar(seed_id: str, limit: int = 40, explain: bool = False, dice=random) -> list[dict]:
     """Radio/mix: tracks by the same artist, album and genre, with a dice roll so it is not the same every time.
 
-    explain=True adds "dev" to every track (developer tools): the parts of its score, its rank and the score of the first track that did not make it."""
+    explain=True adds "dev" to every track (developer tools): the parts of its score, its rank and the score of the first track that did not make it.
+    dice: where the dice roll comes from; the developer tools pass a `random.Random` with a fixed start so that a result can be repeated."""
     with db.db() as c:
         seed = c.execute("SELECT * FROM lib_tracks WHERE id = ?", (seed_id,)).fetchone()
         if seed is None:
@@ -628,7 +629,7 @@ def similar(seed_id: str, limit: int = 40, explain: bool = False) -> list[dict]:
     dj = db.get_bpm_many([seed_id] + [r["id"] for r in rows])
     scored = []
     for r in rows:
-        parts = _similarity(seed, r, dj)
+        parts = _similarity(seed, r, dj, dice)
         scored.append((sum(v for v in parts.values() if v is not None), parts, r))
     ranked = sorted(scored, key=lambda x: x[0], reverse=True)
     cutoff = ranked[limit][0] if len(ranked) > limit else None
