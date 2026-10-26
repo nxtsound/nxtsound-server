@@ -389,10 +389,13 @@ def test_with_a_stem_model_the_bridge_is_made_with_the_singing_led_on_its_own(cl
     c, ids = clicks
     monkeypatch.setattr(stems, "ENABLED", True)
     monkeypatch.setattr(stems, "available", lambda: True)
-    monkeypatch.setattr(stems, "vocals", lambda x: (0.3 * x).astype(np.float32))  # a stand-in for the model
+    seen = []
+    monkeypatch.setattr(stems, "vocals", lambda x: (seen.append(len(x) / djmix.SR), (0.3 * x).astype(np.float32))[1])  # a stand-in for the model
     r = c.get("/api/dj/bridge", params={"a": ids["Click A"], "b": ids["Click B"], "style": "blend"}).json()
     assert not r["skip"] and r["vocals"] and {"a_stop", "b_in", "overlap_s", "would_overlap_s"} <= set(r["vocals"])
     assert "dj_stems" in c.get("/api/server-info").json()["functions"]
+    mix = r["mix_sec"]
+    assert seen == [pytest.approx(mix + 1.8, abs=0.1), pytest.approx(mix + 5.0, abs=0.1)]  # not the whole pieces of the bridge (LEAD + mix + 0.5 and mix + TAIL + 1)
     monkeypatch.setattr(stems, "vocals", lambda x: (_ for _ in ()).throw(RuntimeError("no model")))
     r2 = c.get("/api/dj/bridge", params={"a": ids["Click A"], "b": ids["Click B"], "style": "filter"}).json()
     assert not r2["skip"] and r2["vocals"] is None  # a bridge without it is still a bridge

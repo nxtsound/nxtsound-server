@@ -3365,9 +3365,12 @@ const DJ = {
   bridgeOn: true,     // let the server make the transition (a "bridge", see below) where it can
   noBridge: '',       // "old>new" of a pair for which the server had none: the player does that one itself
 };
-// iPhone/iPad: DJ mode off (iOS does not clock two audio elements reliably in the background: stuttering, loops, drifting tempo)
+// iPhone/iPad: iOS does not clock two audio elements reliably in the background (stuttering, loops, drifting tempo). DJ mode is therefore only
+// worked on while the page is visible (see djTick); the transitions are mostly made by the server, which helps. In the iOS app the first element is
+// played by the app (AVPlayer) and Web Audio cannot reach it: no DJ mode there.
 const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const AC = IOS ? null : (window.AudioContext || window.webkitAudioContext);
+const IOS_APP = !!window.__nativeAudioInstalled;
+const AC = IOS_APP ? null : (window.AudioContext || window.webkitAudioContext);
 try {
   DJ.on = !!AC && localStorage.getItem('app_dj') === '1';
   const fs = parseInt(localStorage.getItem('app_dj_fade'), 10);
@@ -3662,6 +3665,10 @@ function djAbort() {
 function djTick() {
   if (!DJ.on || !DJ.ctx || audio.paused) return;
   if (DJ.ctx.state !== 'running') { DJ.ctx.resume().catch(() => {}); return; }
+  if (IOS && document.hidden) {  // screen locked or another app: the timers are held back, a transition that has not begun would come late
+    if (DJ.plan && !DJ.plan.started && !DJ.mixing) djAbort();
+    if (!DJ.mixing) return;
+  }
   djAhead();
   const p = DJ.plan;
   if (p && p.bridge) { djBridgeTick(p); return; }

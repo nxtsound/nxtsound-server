@@ -198,8 +198,9 @@ The ⋮ menu next to any song offers: play next, add to queue, add to playlist, 
 ### DJ mode (alpha)
 
 With DJ mode on, the radio orders songs into a chain with matching tempo and compatible keys, and the player blends one song
-into the next on the beat. The server analyzes tracks in the background after each scan (turn off with `ANALYZE=0`). DJ mode is off
-on iPhones and iPads, where the system does not allow precise timing for background audio.
+into the next on the beat. The server analyzes tracks in the background after each scan (turn off with `ANALYZE=0`). DJ mode also works in
+Safari on iPhones and iPads, but only while the page is on screen: iOS holds back the timers of a locked or hidden page, so a transition that has not
+begun by then is skipped and the songs simply follow each other. The iOS app has no DJ mode yet.
 
 **Made by the server:** for songs of your library the transition itself is made by the server (a short audio file, the *bridge*, with the end of one song and
 the start of the next lined up exactly, the tempo matched and the effect applied). The player fades over to it a few seconds before the transition and back to

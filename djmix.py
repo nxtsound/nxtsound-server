@@ -489,6 +489,15 @@ def _encode(pcm, dest: Path) -> None:
     os.replace(tmp, dest)
 
 
+def _separate(x, lo: float, hi: float):
+    """The singing of `x` between the seconds `lo` and `hi`, silence elsewhere (the model needs time to run: the less it is given, the better)."""
+    out = np.zeros_like(x)
+    i0, i1 = max(0, int(lo * SR)), min(len(x), int(hi * SR))
+    if i1 > i0:
+        out[i0:i1] = stems.vocals(x[i0:i1])
+    return out
+
+
 def render(a_path: Path, b_path: Path, p: dict, dest: Path) -> dict:
     """Makes the bridge file for a plan. -> {"align_ms", "align_strength", "b_resume", "duration"}."""
     shift, strength = _measure_offset(a_path, b_path, p) if p["lock"] else (0.0, 0.0)  # beats of songs with different tempi do not line up: nothing to correct
@@ -498,7 +507,9 @@ def render(a_path: Path, b_path: Path, p: dict, dest: Path) -> dict:
     vocals, report = None, {}
     if stems.available():
         try:
-            vocals = (stems.vocals(a), stems.vocals(b))
+            # only what is heard of the singing: A from a second before the transition to its end, B until a few seconds after the transition
+            # (the rest of both is the song as it is: where there is no separated singing, the music is the whole signal and nothing changes)
+            vocals = (_separate(a, LEAD - 1.3, LEAD + mix + 0.5), _separate(b, 0.0, mix + 5.0))
         except Exception as e:  # no model, no memory: a bridge without it is still a bridge
             log.warning("stems: not used for this bridge: %s", e)
     pcm = mix_pieces(a, b, {**p, "level": True}, -shift, vocals, report)  # B's beats fall `shift` s late: it has to start that much earlier
