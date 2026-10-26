@@ -41,7 +41,7 @@ def _song(path, chord, bpm=120.0, off=0.3, bar_shift=0, total=66):
 @pytest.mark.skipif(not bpmlib.available(), reason="numpy missing")
 def test_analysis_finds_key_structure_and_downbeat(tmp_path):
     f = tmp_path / "s.wav"
-    _song(f, [NOTE["C"], NOTE["E"], NOTE["G"]], bpm=120, off=0.3)
+    _song(f, [NOTE["C"] / 2, NOTE["C"], NOTE["E"], NOTE["G"]], bpm=120, off=0.3)  # a bare triad is as much C major as E minor: it has a root in the bass
     r = bpmlib.analyze(f)
     assert r and abs(r["bpm"] - 120) < 0.3
     assert r["key"] == "8B"
@@ -87,3 +87,31 @@ def test_startstat_is_recorded_and_validated(alice, bob):
     assert bob.post("/api/startstat", json={"ms": 10, "platform": "tv"}).status_code == 422
     st = alice.get("/api/admin/dashboard").json()["stream_stats"]
     assert st["client_ios"]["n"] >= 1 and st["client_desktop"]["n"] >= 1
+
+
+def test_the_key_follows_the_pitch_and_does_not_stick_to_one_value():
+    """Chords over a loud bass and noisy drums: moving everything up by two semitones moves the Camelot number by two (7 steps per semitone)."""
+    import numpy as np
+    sr = bpmlib.SR
+
+    def song(shift, secs=40):
+        t = np.arange(sr * secs) / sr
+        rng = np.random.default_rng(3)
+        x = np.zeros_like(t)
+        seg = len(t) // 8
+        for i in range(8):
+            sl = slice(i * seg, (i + 1) * seg)
+            for d in ((0, 4, 7), (5, 9, 0), (7, 11, 2), (0, 4, 7))[i % 4]:
+                f = 440 * 2 ** ((48 + shift + d - 69) / 12)
+                x[sl] += sum(np.sin(2 * np.pi * f * k * t[sl]) / k for k in (1, 2, 3)) * 0.12
+            x[sl] += np.sin(2 * np.pi * 440 * 2 ** ((36 + shift - 69) / 12) * t[sl]) * 0.6
+        beat = 60 / 120
+        for k in range(int(secs / beat)):  # a kick and noise on every beat
+            s = int(k * beat * sr)
+            n = int(0.1 * sr)
+            x[s:s + n] += np.sin(2 * np.pi * 55 * np.arange(n) / sr) * np.exp(-np.arange(n) / (0.02 * sr)) * 0.8 + rng.standard_normal(n) * 0.2 * np.exp(-np.arange(n) / (0.02 * sr))
+        return (x / np.abs(x).max() * 0.8).astype(np.float32)
+
+    num = lambda s: int(bpmlib._key(song(s))[0][:-1])  # noqa: E731
+    base = num(0)
+    assert base == 8 and (num(2) - base) % 12 == 2 and (num(5) - base) % 12 == 11

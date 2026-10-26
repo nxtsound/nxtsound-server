@@ -23,7 +23,7 @@ HOP = 128  # about 11.6 ms per frame
 WIN = 512
 ANALYZE_SECONDS = 150
 MAX_SECONDS = 620
-ANALYSIS_VER = 2
+ANALYSIS_VER = 3  # 3: new key detection
 BEAT_ML = os.getenv("BEAT_ML", "0") == "1"
 MIN_BPM, MAX_BPM = 70.0, 180.0
 PHASE_FIX = 0.041  # seconds, measured on synthetic click tracks
@@ -82,23 +82,35 @@ _KS_MIN = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 
 
 
 def _key(x: "np.ndarray") -> tuple[str, float]:
-    """Key via chroma + Krumhansl profiles -> (Camelot code like "8A", confidence 0..1)."""
+    """Key via chroma + Krumhansl profiles -> (Camelot code like "8A", confidence 0..1).
+    The chroma is made from what stands out as a tone: the spectrogram is median-filtered over time (drums are short, tones last), divided by its
+    running mean over frequency (a bass or a noisy hi-hat does not bury the notes) and the tuning of the recording is taken into account.
+    Without that, loud bass and distorted drums made most songs come out as 8A."""
     n_fft = 8192
     if len(x) < n_fft * 8:
         return "", 0.0
-    hop = n_fft // 2
+    mid = len(x) // 2
+    x = np.ascontiguousarray(x[max(0, mid - 60 * SR):mid + 60 * SR])  # two minutes from the middle are plenty
+    hop = n_fft // 4
     n = (len(x) - n_fft) // hop
-    x = np.ascontiguousarray(x)
     frames = np.lib.stride_tricks.as_strided(x, shape=(n, n_fft), strides=(x.strides[0] * hop, x.strides[0]))
-    spec = np.abs(np.fft.rfft(frames * np.hanning(n_fft).astype(np.float32), axis=1))
     freqs = np.fft.rfftfreq(n_fft, 1.0 / SR)
-    sel = (freqs >= 65) & (freqs <= 2100)
-    pc = (np.round(12 * np.log2(freqs[sel] / 440.0) + 69).astype(int)) % 12
-    mag = np.log1p(spec[:, sel] * 10)
-    chroma = np.zeros(12)
-    for i in range(12):
-        chroma[i] = mag[:, pc == i].sum()
-    if chroma.sum() <= 0:
+    wide = (freqs >= 30) & (freqs <= 3000)  # a margin around the notes we use, so that the running mean is right at their edges
+    spec = np.abs(np.fft.rfft(frames * np.hanning(n_fft).astype(np.float32), axis=1))[:, wide]
+    k = 9
+    padded = np.pad(spec, ((k // 2, k // 2), (0, 0)), mode="edge")
+    harm = np.median(np.stack([padded[i:i + n] for i in range(k)]), axis=0)
+    csum = np.cumsum(np.pad(harm, ((0, 0), (21, 20))).astype(np.float64), axis=1)  # float64: differences of large sums
+    base = (csum[:, 41:] - csum[:, :-41]) / 41.0  # running mean over 41 bins
+    tone = np.clip(harm / (base[:, :harm.shape[1]] + 1e-9) - 1.0, 0.0, None)
+    use = (freqs[wide] >= 65) & (freqs[wide] <= 2100)
+    tone = tone[:, use]
+    midi = 12 * np.log2(freqs[wide][use] / 440.0) + 69
+    frac = midi - np.round(midi)
+    midi = midi - np.angle(np.sum(tone.sum(0) * np.exp(2j * np.pi * frac))) / (2 * np.pi)  # tuning of the recording
+    pc = np.round(midi).astype(int) % 12
+    chroma = np.array([tone[:, pc == i].sum() / max(1, int((pc == i).sum())) for i in range(12)])
+    if chroma.sum() <= 0 or np.ptp(chroma) <= 0:
         return "", 0.0
     corr = []
     for t in range(12):

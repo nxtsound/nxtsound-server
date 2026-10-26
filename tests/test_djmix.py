@@ -60,7 +60,7 @@ def test_a_loud_start_or_a_clash_of_keys_means_a_short_transition_without_bass_s
 def test_the_style_is_not_the_same_twice_and_is_repeatable():
     import random
     styles = {djmix.pick_style(True, 1, False, "auto", "blend,loop", random.Random(i)) for i in range(60)}
-    assert not styles & {"blend", "loop"} and styles == {"filter", "echo", "bass"}
+    assert not styles & {"blend", "loop"} and styles == {"filter", "echo", "bass", "cut", "reverb"}
     assert {djmix.pick_style(True, 1, False, "auto", "", random.Random(i)) for i in range(80)} == set(djmix.STYLES)
     assert "bass" not in {djmix.pick_style(True, -1, False, "auto", "", random.Random(i)) for i in range(80)}
     assert djmix.pick_style(True, 0, False, "auto", "", random.Random("x")) == djmix.pick_style(True, 0, False, "auto", "", random.Random("x"))
@@ -101,7 +101,7 @@ def _pieces(seconds=40, sr=djmix.SR):
 PLAN = {"mix_sec": 8.0, "beat_a": 0.5, "style": "fade", "swap": 4, "gap": True}
 
 
-@pytest.mark.parametrize("style", ["fade", "blend", "filter", "echo", "loop", "bass"])
+@pytest.mark.parametrize("style", ["fade", "blend", "filter", "echo", "loop", "bass", "cut", "reverb"])
 def test_the_bridge_starts_with_the_old_song_and_ends_with_the_new_one(style):
     a, b = _pieces()
     out = djmix.mix_pieces(a, b, {**PLAN, "style": style})
@@ -272,3 +272,36 @@ def test_the_loop_roll_repeats_ever_shorter_pieces_of_the_old_song():
     assert np.allclose(out[i0 + 40:i0 + n - 40], out[i0 + n + 40:i0 + 2 * n - 40], atol=1e-6)  # the first beat is played twice
     tail = i0 + 3 * n + n // 2
     assert np.allclose(out[tail + 40:tail + n // 8 - 40], out[tail + n // 8 + 40:tail + n // 4 - 40], atol=1e-6)  # and the last piece four times
+
+
+def test_without_a_tempo_match_the_styles_that_do_not_need_one_are_chosen():
+    import random
+    got = {djmix.pick_style(False, 0, False, "auto", "", random.Random(i)) for i in range(60)}
+    assert got == {"echo", "cut", "reverb"}
+    assert djmix.pick_style(False, 0, False, "loop") == "echo" and djmix.pick_style(False, 0, False, "cut") == "cut"
+    p = djmix.plan(info(120.0), info(90.0), 240.0, "cut")
+    assert not p["skip"] and not p["lock"] and p["style"] == "cut" and p["info"]["mb"] == 4
+
+
+def test_a_quiet_start_is_brought_up_only_while_the_transition_is_on():
+    a, b = _pieces()
+    n = int(round((djmix.LEAD + 8.0 + djmix.TAIL) * djmix.SR))
+    ax, bx = np.zeros((n, 2), np.float32), np.zeros((n, 2), np.float32)
+    ax[:len(a)] = a[:n]
+    bx[int(djmix.LEAD * djmix.SR):] = (b * 0.02)[: n - int(djmix.LEAD * djmix.SR)]
+    g = djmix._level_gain(ax, bx, 8.0, n)
+    at = lambda s: float(g[int((djmix.LEAD + s) * djmix.SR)])  # noqa: E731
+    assert at(1.0) == pytest.approx(2.0, abs=0.01)  # up by 6 dB, not more
+    assert at(-2.0) == pytest.approx(g[0]) and 1.0 < at(8 + 1.5) < 2.0 and at(8 + 3.6) == 1.0 and g[-1] == 1.0  # and gone when the player hands over
+    loud = djmix._level_gain(ax, ax * 2, 8.0, n)
+    assert np.allclose(loud, 1.0)  # a new song that is loud enough is left alone
+
+
+def test_the_room_of_the_cut_rings_on_after_the_old_song_stopped():
+    a, b = _pieces()
+    quiet_b = np.zeros_like(b)
+    out = djmix.mix_pieces(a, quiet_b, {**PLAN, "style": "cut"})
+    lead = int(djmix.LEAD * djmix.SR)
+    after = np.abs(out[lead + int(0.05 * djmix.SR): lead + int(0.3 * djmix.SR)]).max()
+    assert 0.001 < after < np.abs(a[:lead]).max()  # something is there, softer than the song
+    assert np.abs(out[lead + int(1.6 * djmix.SR):]).max() < 1e-3  # and it dies away

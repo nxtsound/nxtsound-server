@@ -174,7 +174,7 @@ def test_analysis_view_is_for_developer_admins_only(alice, lib, monkeypatch):
     bob = make_client("Bob")
     assert bob.get(f"/api/dev/analysis/{ids['Alpha']}").status_code == 404
     monkeypatch.setattr(main.bpmlib, "curves", lambda path: {"seconds": 1.0, "loudness": [1.0], "loudness_step": 0.5, "onset": [], "onset_step": 0.1})
-    main.db.save_bpm(ids["Alpha"], {"bpm": 120.0, "first_beat": 0.1, "conf": 0.8, "key": "8A", "ver": 2})
+    main.db.save_bpm(ids["Alpha"], {"bpm": 120.0, "first_beat": 0.1, "conf": 0.8, "key": "8A", "ver": main.bpmlib.ANALYSIS_VER})
     r = alice.get(f"/api/dev/analysis/{ids['Alpha']}").json()
     assert r["usable"] and r["stored"]["bpm"] == 120.0 and r["stored"]["key"] == "8A" and r["curves"]["loudness"] == [1.0]
     assert alice.get("/api/dev/analysis/local:00000000-0000-0000-0000-000000000000").status_code == 404

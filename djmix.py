@@ -39,7 +39,7 @@ MAX_LOCK = 0.08       # the new song is stretched to the old one's tempo if they
 MIN_CONF = 0.35       # the analysis must be this sure
 MAX_ALIGN_MS = 80     # the correction found by comparing drum onsets is accepted up to this
 MIN_ALIGN_STRENGTH = 0.15
-RENDER_VERSION = 1    # raise when the sound of a bridge changes: old files are not reused
+RENDER_VERSION = 2    # raise when the sound of a bridge changes: old files are not reused
 BRIDGE_DIR = Path(os.getenv("DJ_BRIDGE_DIR") or Path(db.DB_PATH).parent / "dj-bridges")  # next to the database, in the data volume
 MAX_BYTES = int(float(os.getenv("DJ_BRIDGE_MB", "300")) * 1024 * 1024)
 ENABLED = os.getenv("DJ_BRIDGES", "1") != "0"
@@ -63,17 +63,19 @@ def key_fit(a: dict, b: dict) -> int:
     return 1 if d <= 1 else 0 if d <= 2 else -1
 
 
-STYLES = ("blend", "filter", "echo", "loop", "bass")
+STYLES = ("blend", "filter", "echo", "loop", "bass", "cut", "reverb")
+NO_LOCK_STYLES = ("echo", "cut", "reverb")  # these work without matching the tempo
 
 
 def pick_style(lock: bool, fit: int, hot: bool, style: str = "auto", avoid: str = "", rng=random) -> str:
     """The style of a transition. Without tempo match only the echo works; otherwise the one asked for, or at random (never one of the last two:
     `avoid` is a comma separated list)."""
-    if not lock:
-        return "echo"
     if style in STYLES:
-        return style
-    pool = [("blend", 0 if fit < 0 or hot else 4), ("filter", 2), ("echo", 5 if hot or fit < 0 else 2), ("loop", 4), ("bass", 0 if fit < 0 or hot else 4)]
+        return style if lock or style in NO_LOCK_STYLES else "echo"
+    pool = [("blend", 0 if fit < 0 or hot else 4), ("filter", 2), ("echo", 5 if hot or fit < 0 else 2), ("loop", 4), ("bass", 0 if fit < 0 or hot else 4),
+            ("cut", 4 if hot else 3), ("reverb", 2 if hot else 3)]
+    if not lock:
+        pool = [(k, w) for k, w in pool if k in NO_LOCK_STYLES]
     recent = avoid.split(",")
     pool = [(k, w) for k, w in pool if w > 0 and k not in recent]
     r = rng.random() * sum(w for _, w in pool)
@@ -116,8 +118,8 @@ def plan(a: dict, b: dict, a_dur: float, style: str = "auto", avoid: str = "", r
     def q4(v: float) -> int:
         return max(8, min(32, int(v // 4) * 4))
 
-    mb = 8 if st == "echo" else 16  # length in beats: as long as A's outro and B's intro allow
-    if st != "echo":
+    mb = 8 if st == "echo" else 4 if st in ("cut", "reverb") else 16  # length in beats: as long as A's outro and B's intro allow
+    if st not in ("echo", "cut", "reverb"):
         if has_outro:
             mb = q4((end_a - outro) / beat_a)
         if intro_beats is not None and intro_beats >= 8:
@@ -220,6 +222,38 @@ def _sweep(x, cutoff, kind: str, n_fft: int = 2048, hop: int = 512):
     return (out / np.maximum(norm, 1e-6)[:, None])[pad:pad + n]
 
 
+def _level_gain(ax, bx, mix: float, n: int):
+    """A quiet start of the new song (a long intro) is brought up towards the level of the old song, by at most 6 dB, and only while the transition is on:
+    the gain is back to 1 3.5 s after it, before the player hands over to the new song's own file, which has no such gain."""
+    win = SR // 2
+    ref = float(np.sqrt(np.mean(ax[int((LEAD - 4.0) * SR):int(LEAD * SR)].mean(axis=1) ** 2))) + 1e-6
+    target = 0.7 * ref
+    starts = np.arange(int(LEAD * SR), min(n, int((LEAD + mix + 3.5) * SR)), win)
+    if len(starts) < 2:
+        return np.ones(n, dtype=np.float32)
+    lev = np.array([np.sqrt(np.mean(bx[s:s + win].mean(axis=1) ** 2)) for s in starts])
+    want = np.clip(target / (lev + 1e-4), 1.0, 2.0)
+    want = np.convolve(np.pad(want, 2, mode="edge"), np.ones(5) / 5, mode="valid")  # smooth: no pumping
+    tau = (starts + win / 2 - LEAD * SR) / SR
+    fade = np.clip(1.0 - (tau - mix) / 3.5, 0.0, 1.0)
+    g = 1.0 + (want - 1.0) * fade
+    t = np.arange(n) / SR - LEAD
+    return np.interp(t, tau, g, left=g[0], right=1.0).astype(np.float32)
+
+
+def _reverb(x, tau: float, seconds: float, seed: int = 7):
+    """The sound `x` (stereo) through a room: noise that dies away (time constant `tau`, `seconds` long), different for each ear. The tail is longer than `x`."""
+    rng = np.random.default_rng(seed)
+    n = int(seconds * SR)
+    env = np.exp(-np.arange(n) / (tau * SR)).astype(np.float32)
+    ir = (rng.standard_normal((n, 2)).astype(np.float32) * env[:, None])
+    ir[: int(0.004 * SR)] *= np.linspace(0, 1, int(0.004 * SR))[:, None]  # no click at the start
+    ir /= np.sqrt((ir ** 2).sum(axis=0)) + 1e-9
+    size = 1 << int(np.ceil(np.log2(len(x) + n)))
+    y = np.fft.irfft(np.fft.rfft(x, size, axis=0) * np.fft.rfft(ir, size, axis=0), size, axis=0)[: len(x) + n]
+    return y.astype(np.float32)
+
+
 def _roll(ax, i0: int, beat: float):
     """`ax` where the four beats from sample `i0` are replaced by loops that get shorter: each piece is the start of its part of the music, repeated."""
     out = ax.copy()
@@ -276,6 +310,8 @@ def mix_pieces(a, b_piece, p: dict, delta: float = 0.0):
     else:
         k = min(len(b_piece) + off, n)
         bx[:k] = b_piece[-off:-off + k]
+    if p.get("level"):
+        bx *= _level_gain(ax, bx, mix, n)[:, None]
     s0 = max(0, int((LEAD - 0.3) * SR))  # the effects begin here; before it the old song stays as it is
     neutral_hp, neutral_lp = np.full(n, 10.0), np.full(n, 20000.0)
 
@@ -310,6 +346,16 @@ def mix_pieces(a, b_piece, p: dict, delta: float = 0.0):
         hp_b = _ramp(tau, sw, 0.03, 450.0, 10.0)
         gb = np.where(tau < 0, 0.0, _up(tau / (0.5 * sw)))
         hp_a, echo_send = neutral_hp, None
+    elif st == "cut":  # A stops dead on the beat and rings out in a small room; B starts at once
+        ga = np.where(tau < 0, 1.0, np.clip(1 - tau / 0.012, 0.0, 1.0))
+        hp_b = neutral_hp
+        gb = np.where(tau < 0, 0.0, _up(tau / 0.02))
+        hp_a, lp_a, echo_send = neutral_hp, neutral_lp, None
+    elif st == "reverb":  # A is washed away into a big room while it fades out, B comes in without bass underneath
+        ga = np.where(tau < 0, 1.0, _down(tau / (1.5 * beat)))
+        hp_b = _ramp(tau, 1.5 * beat, 2 * beat, 350.0, 10.0, exp=True)
+        gb = np.where(tau < 0, 0.0, _up((tau - 0.5 * beat) / (2 * beat)))
+        hp_a, lp_a, echo_send = neutral_hp, neutral_lp, None
     else:  # echo: A fades out into an echo, B comes in on the beat
         ga = np.where(tau < 0, 1.0, np.clip(1 - tau / (0.5 * beat), 0.0, 1.0))
         hp_b = _ramp(tau, 0, 2 * beat, 900.0, 10.0, exp=True)
@@ -317,6 +363,13 @@ def mix_pieces(a, b_piece, p: dict, delta: float = 0.0):
         hp_a, lp_a = neutral_hp, neutral_lp
         echo_send = np.where((tau >= 0) & (tau <= beat), 0.9 * (1 - tau / beat), 0.0)
     ga = np.where(tau > mix, 0.0, ga)
+    wet = None
+    if st in ("cut", "reverb"):  # what A leaves in the room: its last stretch (a quarter beat for the cut, a whole beat for the wash) goes through the reverb
+        k0 = int((LEAD - (0.25 if st == "cut" else 1.0) * beat) * SR)
+        k1 = int(LEAD * SR)
+        tail = ax[k0:k1] * np.linspace(0.3, 1.0, k1 - k0)[:, None].astype(np.float32)
+        wet = _reverb(tail, 0.25 if st == "cut" else 0.7, 1.2 if st == "cut" else 4.0) * (0.55 if st == "cut" else 0.8)
+        wet = _sweep(np.pad(wet, ((0, SR // 8), (0, 0))), np.full(len(wet) + SR // 8, 180.0), "hp")[: len(wet)]  # no mud in the bass
 
     a_fx = ax.copy()
     if st in ("blend",):
@@ -338,6 +391,11 @@ def mix_pieces(a, b_piece, p: dict, delta: float = 0.0):
     b_out = np.zeros_like(bx)
     b_out[s0:] = b_fx * gb[s0:, None]
     out = a_out + b_out
+    if wet is not None:
+        w0 = int(LEAD * SR)  # the room rings on from where A is cut or starts to fade; what the reverb made before that is already part of A
+        ring = wet[w0 - k0:]
+        n_w = min(len(ring), n - w0)
+        out[w0:w0 + n_w] += ring[:n_w]
     over = np.abs(out) > 0.95  # a gentle limit, only where the sum would be too loud
     out = np.where(over, np.sign(out) * (0.95 + 0.05 * np.tanh((np.abs(out) - 0.95) / 0.05)), out)
     return out.astype(np.float32)
@@ -352,11 +410,11 @@ def _encode(pcm, dest: Path) -> None:
 
 def render(a_path: Path, b_path: Path, p: dict, dest: Path) -> dict:
     """Makes the bridge file for a plan. -> {"align_ms", "align_strength", "b_resume", "duration"}."""
-    shift, strength = _measure_offset(a_path, b_path, p)
+    shift, strength = _measure_offset(a_path, b_path, p) if p["lock"] else (0.0, 0.0)  # beats of songs with different tempi do not line up: nothing to correct
     mix, rate = p["mix_sec"], p["rate"]
     a = _decode(a_path, p["a_start"], LEAD + mix + 0.5)
     b = _decode(b_path, p["x"], (mix + TAIL + 1.0) * rate, rate)  # stretched: (mix + TAIL + 1) seconds long
-    pcm = mix_pieces(a, b, p, -shift)  # B's beats fall `shift` s late: it has to start that much earlier
+    pcm = mix_pieces(a, b, {**p, "level": True}, -shift)  # B's beats fall `shift` s late: it has to start that much earlier
     dest.parent.mkdir(parents=True, exist_ok=True)
     _encode(pcm, dest)
     total = len(pcm) / SR
