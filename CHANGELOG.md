@@ -6,7 +6,11 @@ minor versions may contain breaking changes, which are called out.
 ## [Unreleased]
 
 ### Added
+- Developer tools, DJ tab: a report for every finished transition (how far apart the beats were, speed, stalls, late start, whether the listener stayed) with a light, a table per style and a button to copy it.
 - **Developer tools** (`DEVTOOLS=1`, admins only, off by default): a *DEV* button in the header opens a panel. Every song of a radio shows the score it was chosen with, split into its parts; the lists under *For you* say why a song is in them; the DJ tab shows the plan of each transition; the Analysis tab draws what the tempo analysis saw; the Home tab shows the seeds, the cache and the time per widget; the Plugins tab lists the calls to plugins. A fixed dice repeats a radio or mix, and a snapshot with every name replaced can be attached to a bug report and loaded with `tools/load_snapshot.py`. See the developer guide.
+
+### Fixed
+- Developer tools, Analysis tab: a song that had not been analyzed yet always showed “not analyzed”; it is analyzed when the tab opens.
 
 ## [0.3.1] – 2026-10-23
 

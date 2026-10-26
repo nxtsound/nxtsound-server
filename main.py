@@ -2131,8 +2131,15 @@ async def dev_analysis(track_id: str):
     path = library.file_path(track_id)
     if not path:
         raise HTTPException(404)
+    stored = db.get_bpm(track_id)
+    ran = False
+    if stored is None or stored.get("ver", 1) < bpmlib.ANALYSIS_VER:  # never analyzed (or by an older version): do it now, like DJ mode would
+        res = await asyncio.get_running_loop().run_in_executor(None, _bpm_sync, path) or {"bpm": 0.0, "first_beat": 0.0, "conf": 0.0}
+        res.setdefault("ver", bpmlib.ANALYSIS_VER)
+        db.save_bpm(track_id, res)
+        stored, ran = db.get_bpm(track_id), True
     curves = await asyncio.get_running_loop().run_in_executor(None, _curves_sync, path)
-    return {"usable": True, "stored": db.get_bpm(track_id), "curves": curves, "min_conf": BPM_MIN_CONF, "analysis_version": bpmlib.ANALYSIS_VER}
+    return {"usable": True, "stored": stored, "analyzed_now": ran, "curves": curves, "min_conf": BPM_MIN_CONF, "analysis_version": bpmlib.ANALYSIS_VER}
 
 
 @dev_api.get("/plugin-calls")

@@ -12,6 +12,8 @@
     artist: 'same artist', album: 'same album', genre: 'same genre', year: 'release year close by',
     dj: 'tempo and key fit (only if both songs are analyzed)', random: 'dice roll, new on every request',
   };
+  // How a transition is judged (milliseconds between the beats of the two songs, and so on). Measured, not heard: see the developer guide.
+  const PHASE_WARN_MS = 40, PHASE_BAD_MS = 80, LAG_WARN_MS = 400, REACT_S = 15;
   const TABS = [['queue', 'Queue'], ['dj', 'DJ'], ['analysis', 'Analysis'], ['home', 'Home'], ['plugins', 'Plugins'], ['requests', 'Requests']];
   const log = [];
   const djLog = [];
@@ -44,6 +46,8 @@
     #devPanel .dcard{background:var(--card2,#222);border-radius:8px;padding:8px 10px;margin:0 0 10px}
     #devPanel .dcard h4{margin:0 0 4px;font:600 12px ui-monospace,Menlo,monospace;white-space:normal}
     #devPanel .state{font-size:10px;padding:1px 6px;border-radius:8px;background:#333;margin-left:6px;color:#ddd}
+    #devPanel .light{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:baseline}
+    #devPanel .l0{background:#5dd39e}#devPanel .l1{background:#ffb454}#devPanel .l2{background:#ff6b6b}#devPanel .l9{background:#666}
     #devPanel details{margin:2px 0}
     #devPanel pre{white-space:pre-wrap;word-break:break-all;margin:4px 0;color:var(--dim)}
     #devPanel svg{width:100%;height:auto;display:block;margin:6px 0}
@@ -128,10 +132,60 @@
   let lastPlan = null;
   let lastEntry = null;
 
+  function finish(e) {
+    const pl = e.plan;
+    e.state = pl.skip ? 'skipped' : !pl.started ? 'dropped'
+      : (pl.switched && pl.t0 && performance.now() - pl.t0 >= pl.mixSec * 950) ? 'done' : 'aborted';  // the player empties DJ.plan when it is over, and also when it gives up
+  }
+
+  // While a transition runs: how far apart are the beats of the two songs, how fast is the new one played, did the audio stall?
+  function sampleMix() {
+    const p = lastPlan, e = lastEntry;
+    if (!p || !e || !p.started || p.skip || typeof curEl === 'undefined') return;
+    const ea = p.switched ? otherEl() : curEl, eb = p.switched ? curEl : otherEl();
+    const m = e.m || (e.m = { phase: [], rateMin: 9, rateMax: 0, stalls: 0, lagMs: null });
+    if (m.lagMs === null) m.lagMs = Math.round((ea.currentTime - p.tA) * 1000);
+    if (p.lock && !p.fade && !eb.paused && !eb.seeking) m.phase.push(Math.abs(djPhaseErr(p, ea, eb)) * (60 / p.bpmB) * 1000);
+    m.rateMin = Math.min(m.rateMin, eb.playbackRate);
+    m.rateMax = Math.max(m.rateMax, eb.playbackRate);
+  }
+
+  // Did the listener stay? Leaving the new song within REACT_S seconds after the switch counts against the transition.
+  function watchReaction() {
+    const now = performance.now();
+    for (const e of djLog) {
+      if (e.reaction || !e.switchedAt) continue;
+      const cur = currentTrack();
+      if (!cur || !e.to || cur.id !== e.to.id) e.reaction = 'left';
+      else if (now - e.switchedAt > REACT_S * 1000) e.reaction = 'stayed';
+    }
+  }
+
+  // The value that 9 in 10 samples stay below: one stray sample while the beats are still locking in does not decide a transition
+  const p90 = (arr) => [...arr].sort((a, b) => a - b)[Math.floor(0.9 * (arr.length - 1))];
+
+  function verdict(e) {
+    const m = e.m, why = [];
+    let level = 0;
+    const bump = (l, t) => { level = Math.max(level, l); why.push(t); };
+    if (e.state === 'skipped') return { level: 9, why: ['no transition'] };
+    if (e.state === 'aborted') bump(2, 'the player gave up in the middle');
+    if (m && m.stalls) bump(2, `audio stalled ${m.stalls}×`);
+    if (m && m.phase.length) {
+      const mx = p90(m.phase);
+      if (mx > PHASE_BAD_MS) bump(2, `beats ${Math.round(mx)} ms apart (9 in 10 samples below)`);
+      else if (mx > PHASE_WARN_MS) bump(1, `beats ${Math.round(mx)} ms apart (9 in 10 samples below)`);
+    }
+    if (m && m.lagMs !== null && m.lagMs > LAG_WARN_MS) bump(1, `started ${m.lagMs} ms late`);
+    if (e.reaction === 'left') bump(2, `the listener left within ${REACT_S} s`);
+    if (!why.length) why.push(e.state === 'done' ? 'nothing to complain about' : 'not finished yet');
+    return { level: e.state === 'done' || level ? level : 9, why };
+  }
+
   function watchDj() {
     const p = (typeof DJ !== 'undefined') ? DJ.plan : null;
     if (p !== lastPlan) {
-      if (lastEntry && !p) lastEntry.state = lastEntry.plan.skip ? 'skipped' : lastEntry.plan.started ? 'done' : 'dropped';
+      if (lastEntry && !p) finish(lastEntry);
       if (p) {
         const from = currentTrack(), to = S.queue[S.idx + 1] || null;
         lastEntry = { n: djLog.length ? djLog[0].n + 1 : 1, time: new Date().toTimeString().slice(0, 8), from, to, plan: p, state: 'planned',
@@ -141,7 +195,11 @@
       }
       lastPlan = p;
     }
-    if (lastEntry && p) lastEntry.state = p.skip ? 'skipped' : p.switched ? 'switched' : p.started ? 'mixing' : p.warm ? 'warming' : 'planned';
+    if (lastEntry && p) {
+      lastEntry.state = p.skip ? 'skipped' : p.switched ? 'switched' : p.started ? 'mixing' : p.warm ? 'warming' : 'planned';
+      if (p.switched && !lastEntry.switchedAt) lastEntry.switchedAt = performance.now();
+    }
+    watchReaction();
     if (open && tab === 'dj') render();
   }
 
@@ -176,14 +234,44 @@
       } else rows.push(row('length', `${f1(p.mixSec)} s`));
       rows.push(row('starts at', `${f1(p.tA)} s of the old song`));
     }
+    const v = verdict(e), m = e.m;
+    const res = [row('result', `<span class="light l${v.level}"></span>${esc(v.why.join('; '))}`)];
+    if (m && m.phase.length) res.push(row('beats apart', `${Math.round(m.phase.reduce((a, b) => a + b, 0) / m.phase.length)} ms on average, ${Math.round(p90(m.phase))} ms at the 90th percentile, ${Math.round(Math.max(...m.phase))} ms at most (${m.phase.length} samples)`));
+    if (m && m.rateMax > 0) res.push(row('speed', `${(m.rateMin * 100).toFixed(1)} to ${(m.rateMax * 100).toFixed(1)} % (the new song)`));
+    res.push(row('listener', e.reaction === 'stayed' ? '<span class="ok">stayed</span>' : e.reaction === 'left' ? `<span class="bad">left within ${REACT_S} s</span>` : e.switchedAt ? 'waiting …' : '–'));
+    res.push(row('your verdict', ['up', 'down'].map((k) => `<button class="mini" data-dev-rate="${e.n}:${k}" ${e.rating === k ? 'style="background:#fff;color:#000"' : ''}>${k === 'up' ? '👍 good' : '👎 bad'}</button>`).join(' ')));
     return `<div class="dcard"><h4>${name(e.from)} → ${name(e.to)}<span class="state">${esc(e.state)}</span> <span class="dim">${esc(e.time)}</span></h4>
-      ${timeline(e)}<table>${rows.join('')}</table></div>`;
+      ${timeline(e)}<table>${rows.join('')}<tr><td colspan="2"><hr style="border:0;border-top:1px solid #444;margin:4px 0"></td></tr>${res.join('')}</table></div>`;
+  }
+
+  // Per style: how often it went well. Only finished transitions count.
+  function djStats() {
+    const by = {};
+    for (const e of djLog.filter((x) => x.state === 'done' || x.state === 'aborted')) {
+      const s = e.plan.fade ? 'fade' : e.plan.style, v = verdict(e).level;
+      const r = by[s] || (by[s] = { n: 0, g: 0, y: 0, r: 0, up: 0, down: 0, ph: [] });
+      r.n++; if (v === 0) r.g++; else if (v === 1) r.y++; else r.r++;
+      if (e.rating === 'up') r.up++; if (e.rating === 'down') r.down++;
+      if (e.m && e.m.phase.length) r.ph.push(p90(e.m.phase));
+    }
+    const rows = Object.entries(by).map(([s, r]) => `<tr><td>${esc(s)}</td><td class="n">${r.n}</td><td class="n"><span class="light l0"></span>${r.g}</td><td class="n"><span class="light l1"></span>${r.y}</td><td class="n"><span class="light l2"></span>${r.r}</td>
+      <td class="n">${r.ph.length ? Math.round(r.ph.reduce((a, b) => a + b, 0) / r.ph.length) + ' ms' : '–'}</td><td class="n">${r.up}/${r.down}</td></tr>`).join('');
+    return rows ? `<table><tr><th>style</th><th class="n">n</th><th class="n">ok</th><th class="n">meh</th><th class="n">bad</th><th class="n">beats</th><th class="n">👍/👎</th></tr>${rows}</table>
+      <p class="dim">Since the page was opened. Light: ok / meh (beats ${PHASE_WARN_MS}+ ms apart or a late start) / bad (${PHASE_BAD_MS}+ ms, stalled, given up, or the listener left within ${REACT_S} s). “beats” is how far apart the beats were (9 in 10 samples below), averaged over the transitions.</p>` : '';
+  }
+
+  function djReport() {
+    return djLog.map((e) => ({ time: e.time, from: e.from && e.from.title, to: e.to && e.to.title, state: e.state, style: e.plan.fade ? 'fade' : e.plan.style, lock: !!e.plan.lock,
+      rate: e.plan.rate, bpm: [e.a && e.a.bpm, e.b && e.b.bpm], key: [e.a && e.a.key, e.b && e.b.key], info: e.plan.info, why: e.plan.why, mixSec: e.plan.mixSec, tA: e.plan.tA,
+      metrics: e.m && { maxBeatsApartMs: e.m.phase.length ? Math.round(Math.max(...e.m.phase)) : null, p90BeatsApartMs: e.m.phase.length ? Math.round(p90(e.m.phase)) : null, samples: e.m.phase.length, rate: [e.m.rateMin, e.m.rateMax], stalls: e.m.stalls, startLagMs: e.m.lagMs },
+      reaction: e.reaction || null, rating: e.rating || null, result: verdict(e) }));
   }
 
   function djTab() {
     const on = typeof DJ !== 'undefined' && DJ.on;
     const state = `<p class="dim">DJ mode is ${on ? '<span class="ok">on</span>' : 'off'}${on ? `, style ${esc(DJ.style)}, plain fade ${DJ.fadeSec} s${DJ.fadeFallback ? '' : ' (no fallback)'}` : ' (it is not available on iPhone and iPad)'}. A plan appears about 2 minutes before a song ends.</p>`;
-    return state + (djLog.length ? djLog.map(djCard).join('') : '<p class="dim">No transition planned yet. Turn DJ mode on in the player settings and let a song with a next song run towards its end.</p>');
+    const tools = djLog.length ? '<p><button class="mini" data-dev-copy>Copy report (JSON)</button></p>' : '';
+    return state + djStats() + tools + (djLog.length ? djLog.map(djCard).join('') : '<p class="dim">No transition planned yet. Turn DJ mode on in the player settings and let a song with a next song run towards its end.</p>');
   }
 
   // ---------- Analysis ----------
@@ -234,8 +322,8 @@
     if (!d.usable) return `<p class="dim">${esc(analysis.title)}: ${esc(d.reason)}</p>`;
     const s = d.stored;
     const rows = s ? Object.entries(s).filter(([k]) => !['ready', 'usable'].includes(k)).map(([k, v]) => `<tr><td class="dim">${esc(k)}</td><td>${esc(typeof v === 'number' ? String(Math.round(v * 1000) / 1000) : String(v))}</td></tr>`).join('') : '';
-    const verdict = !s ? 'not analyzed yet' : s.conf >= d.min_conf ? `<span class="ok">usable</span> (confidence ${fmt(s.conf)} ≥ ${d.min_conf})` : `<span class="bad">not usable</span> (confidence ${fmt(s.conf)} < ${d.min_conf}): DJ mode will crossfade this song`;
-    return `<h4 style="margin:0 0 4px">${esc(analysis.title)}</h4><div>${verdict}, analysis version ${d.analysis_version}</div>${analysisChart(d)}<table>${rows}</table>
+    const verdict = !s ? 'no result' : s.conf >= d.min_conf ? `<span class="ok">usable</span> (confidence ${fmt(s.conf)} ≥ ${d.min_conf})` : `<span class="bad">not usable</span> (confidence ${fmt(s.conf)} < ${d.min_conf}): DJ mode will crossfade this song`;
+    return `<h4 style="margin:0 0 4px">${esc(analysis.title)}</h4><div>${verdict}, analysis version ${d.analysis_version}${d.analyzed_now ? " (analyzed just now)" : ""}</div>${analysisChart(d)}<table>${rows}</table>
       <p class="dim">The curves are computed again from the file when you open this tab; the values are what the server stored.</p>`;
   }
 
@@ -329,6 +417,12 @@
         if (tab === 'analysis') loadAnalysis();
         render();
       } else if (b.dataset.devRetry !== undefined) { analysis = null; loadAnalysis(); }
+      else if (b.dataset.devRate) {
+        const [n, k] = b.dataset.devRate.split(':'), e = djLog.find((x) => x.n === +n);
+        if (e) { e.rating = e.rating === k ? undefined : k; render(); }
+      } else if (b.dataset.devCopy !== undefined) {
+        navigator.clipboard.writeText(JSON.stringify(djReport(), null, 1)).then(() => { b.textContent = 'Copied'; }, () => { b.textContent = 'Could not copy'; });
+      }
     });
     panel.querySelector('[data-dev-dice]').addEventListener('change', (e) => {
       const v = e.target.value.trim();
@@ -348,6 +442,10 @@
     setInterval(() => { if (open && (tab === 'queue' || (tab === 'analysis' && currentTrack() && (!analysis || analysis.id !== currentTrack().id)))) render(); }, 1500);
     setInterval(() => { if (open && tab === 'plugins') loadPluginCalls(); }, 3000);
     setInterval(watchDj, 400);  // the plan of a transition is made by the player, here it is only watched
+    setInterval(sampleMix, 100);  // finer while a transition runs: the beats of the two songs
+    [elA, elB].forEach((el) => el.addEventListener('waiting', () => {
+      if (lastEntry && lastPlan && lastPlan.started && lastEntry.m) lastEntry.m.stalls++;
+    }));
   }
 
   window.DEV = { log: logRequest, chip, why, home: (d) => { homeDev = d; if (open && tab === 'home') render(); } };

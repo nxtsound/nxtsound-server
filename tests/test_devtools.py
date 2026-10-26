@@ -180,6 +180,19 @@ def test_analysis_view_is_for_developer_admins_only(alice, lib, monkeypatch):
     assert alice.get("/api/dev/analysis/local:00000000-0000-0000-0000-000000000000").status_code == 404
 
 
+def test_a_song_without_analysis_is_analyzed_when_the_tab_asks(alice, lib, monkeypatch):
+    monkeypatch.setattr(devtools, "ENABLED", True)
+    ids = ids_by_title(alice)
+    monkeypatch.setattr(main.bpmlib, "curves", lambda path: {"seconds": 1.0, "loudness": [1.0], "loudness_step": 0.5, "onset": [], "onset_step": 0.1})
+    seen = []
+    monkeypatch.setattr(main.bpmlib, "analyze", lambda path: seen.append(path) or {"bpm": 123.0, "first_beat": 0.2, "conf": 0.9, "key": "5A", "ver": main.bpmlib.ANALYSIS_VER})
+    assert main.db.get_bpm(ids["Beta"]) is None
+    first = alice.get(f"/api/dev/analysis/{ids['Beta']}").json()
+    assert first["analyzed_now"] and first["stored"]["bpm"] == 123.0 and main.db.get_bpm(ids["Beta"])["key"] == "5A" and len(seen) == 1
+    again = alice.get(f"/api/dev/analysis/{ids['Beta']}").json()
+    assert not again["analyzed_now"] and len(seen) == 1  # once is enough
+
+
 # ---------- Plugin calls ----------
 
 def test_plugin_calls_are_kept_only_with_the_tools_on(alice, monkeypatch):
