@@ -37,6 +37,7 @@ import backup
 import backupdrivers
 import db
 import devices
+import devtools
 import enrich
 import homewidgets
 import i18n
@@ -502,7 +503,10 @@ def player_release(body: PlayerIn | None = None, user: dict = Depends(current_us
 
 @api.get("/me")
 def me(user: dict = Depends(current_user)):
-    return {"user": _public(user), "csrf": user["csrf"]}
+    out = {"user": _public(user), "csrf": user["csrf"]}
+    if devtools.active(user):  # the key is only there for admins on a server started with DEVTOOLS=1
+        out["devtools"] = True
+    return out
 
 
 # ---------- Devices: the user's own logins ----------
@@ -1049,16 +1053,21 @@ async def search(q: str = Query(min_length=1, max_length=200), kind: str = "song
 
 
 @api.get("/radio/{track_id}")
-async def radio(track_id: str, limit: int = Query(40, ge=1, le=100), dj: bool = False, user: dict = Depends(current_user)):
-    """Similar tracks; with dj=1 ordered so that tempo and key of consecutive tracks fit (as far as analyzed)."""
+async def radio(track_id: str, limit: int = Query(40, ge=1, le=100), dj: bool = False, debug: bool = False, user: dict = Depends(current_user)):
+    """Similar tracks; with dj=1 ordered so that tempo and key of consecutive tracks fit (as far as analyzed).
+    debug=1 adds "dev" (why each track is there) for admins on a server with DEVTOOLS=1; for everyone else it changes nothing."""
     _check_id(track_id)
+    explain = debug and devtools.active(user)
     blocked = await asyncio.to_thread(db.blocked_sets, user["id"])
     if plugins.is_plugin_id(track_id):
         try:
-            return {"tracks": _allowed(await asyncio.to_thread(plugins.radio, track_id, limit), blocked)}
+            found = _allowed(await asyncio.to_thread(plugins.radio, track_id, limit), blocked)
         except plugins.PluginError:
             return {"tracks": []}
-    tracks = _allowed(await asyncio.to_thread(library.similar, track_id, limit), blocked)
+        if explain:  # the plugin decides what is similar; the server only knows the order
+            found = [{**t, "dev": {"kind": "plugin", "seed": track_id, "rank": i}} for i, t in enumerate(found, 1)]
+        return {"tracks": found}
+    tracks = _allowed(await asyncio.to_thread(library.similar, track_id, limit, explain), blocked)
     if dj:
         tracks = await asyncio.to_thread(library.dj_order, tracks, track_id)
     return {"tracks": tracks}

@@ -181,6 +181,7 @@ async function api(path, opts = {}, timeoutMs = 25000) {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), timeoutMs);
   const init = { credentials: 'same-origin', method: opts.method || 'GET', signal: ctl.signal };
+  const t0 = performance.now();
   if (opts.json !== undefined) {
     init.method = opts.method || 'POST';
     init.headers = { 'Content-Type': 'application/json' };
@@ -189,6 +190,7 @@ async function api(path, opts = {}, timeoutMs = 25000) {
   if (init.method !== 'GET') init.headers = { ...init.headers, 'X-CSRF-Token': S.csrf };
   try {
     const r = await fetch('/api' + path, init);
+    if (window.DEV) DEV.log(init.method, path, r.status, performance.now() - t0);
     if (r.status === 401 && !opts.noRedirect) { showLogin(); throw new ApiError(tr('Not logged in'), 401); }
     if (!r.ok) {
       let msg = r.statusText || tr('Error');
@@ -253,7 +255,7 @@ function trackRow(t, key, i) {
   const artist = esc(t.artist);
   const dur = t.duration ? ` · ${esc(t.duration)}` : '';
   const drag = key === 'queue' ? `<span class="ico drag" data-drag aria-label="${esc(tr('Move'))}">${IC.drag}</span>` : '';
-  return `<div class="track${now}" data-l="${key}" data-i="${i}">${cover(t.thumb)}<div class="meta"><div class="t">${EQ}${esc(t.title)}</div><div class="a">${artist}${dur}${srcTag(t)}</div></div>${drag}<button class="ico" data-menu="${i}" data-l="${key}" aria-label="${esc(tr('Menu'))}">${IC.more}</button></div>`;
+  return `<div class="track${now}" data-l="${key}" data-i="${i}">${cover(t.thumb)}<div class="meta"><div class="t">${EQ}${esc(t.title)}</div><div class="a">${artist}${dur}${srcTag(t)}</div></div>${window.DEV && t.dev ? DEV.chip(t, key, i) : ''}${drag}<button class="ico" data-menu="${i}" data-l="${key}" aria-label="${esc(tr('Menu'))}">${IC.more}</button></div>`;
 }
 
 function trackCard(t, key, i) {
@@ -393,6 +395,7 @@ function trackMenu(t, key, i) {
     items.push({ label: tr('Remove from queue'), danger: true, fn: () => removeFromQueue(i) });
   }
   items.push({ label: tr('Stop recommending …'), danger: true, fn: () => dislikeMenu(t) });
+  if (window.DEV && t.dev) items.push({ label: 'Why this song? (developer)', fn: () => DEV.why(t) });
   sheetMenu(t.title, items);
 }
 
@@ -2103,6 +2106,8 @@ function playFromList(key, i) {
   playList(list, i);
 }
 
+const radioQuery = () => { const q = [DJ.on && 'dj=1', S.devtools && 'debug=1'].filter(Boolean).join('&'); return q ? '?' + q : ''; };
+
 async function startRadio(track) {
   toast(tr('Starting radio …'));
   const token = ++S.radioToken;
@@ -2110,7 +2115,7 @@ async function startRadio(track) {
   S.idx = -1;
   playIndex(0);
   try {
-    const { tracks } = await api(`/radio/${encodeURIComponent(track.id)}${DJ.on ? '?dj=1' : ''}`);
+    const { tracks } = await api(`/radio/${encodeURIComponent(track.id)}${radioQuery()}`);
     if (token !== S.radioToken) return;
     S.queue = [track, ...tracks.filter((t) => t.id !== track.id)];
     refreshQueueIfOpen();
@@ -2123,7 +2128,7 @@ function extendRadio() {
   S.extendP = (async () => {
     try {
       const seed = S.queue[S.queue.length - 1].id;
-      const { tracks } = await api(`/radio/${encodeURIComponent(seed)}${DJ.on ? '?dj=1' : ''}`);
+      const { tracks } = await api(`/radio/${encodeURIComponent(seed)}${radioQuery()}`);
       const have = new Set(S.queue.map((t) => t.id));
       S.queue.push(...tracks.filter((t) => !have.has(t.id)));
       refreshQueueIfOpen();
@@ -3811,6 +3816,15 @@ $('#bellBtn').addEventListener('click', openBell);
 setInterval(loadBell, 60000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') loadBell(); });
 
+// Developer tools (server started with DEVTOOLS=1, admins only): the extra code is loaded only then
+function startDevtools() {
+  if (S.devtools) return;
+  S.devtools = true;
+  const sc = document.createElement('script');
+  sc.src = 'devtools.js' + ASSET_V;
+  document.head.appendChild(sc);
+}
+
 function boot(user) {
   S.user = user;
   loadSources();
@@ -3848,6 +3862,7 @@ $('#loginForm').addEventListener('submit', async (e) => {
     $('#loginPw').value = '';
     await syncLang(r.user);
     boot(r.user);
+    api('/me').then((m) => { if (m.devtools) startDevtools(); }).catch(() => {});  // the login answer does not say whether this is a developer server
   } catch (err) { $('#loginErr').textContent = err.message; } finally { $('#loginBtn').disabled = false; }
 });
 
@@ -3891,5 +3906,6 @@ async function syncLang(user) {
     const r = await api('/me');
     await syncLang(r.user);
     boot(r.user);
+    if (r.devtools) startDevtools();
   } catch (e) { if (e && e.status === 401) showLogin(); else showUnreachable(); }  // not logged in, or no connection to the server
 })();

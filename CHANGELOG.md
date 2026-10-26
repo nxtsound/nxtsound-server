@@ -3,6 +3,11 @@
 All notable changes are listed here. The project follows [semantic versioning](https://semver.org); while the version starts with `0.`,
 minor versions may contain breaking changes, which are called out.
 
+## [Unreleased]
+
+### Added
+- **Developer tools** (`DEVTOOLS=1`, admins only, off by default): a *DEV* button in the header opens a panel with the requests and their timings, and every song of a radio shows the score it was chosen with, split into its parts (artist, album, genre, year, tempo and key fit, dice roll). See the developer guide.
+
 ## [0.3.1] – 2026-10-23
 
 ### Fixed

@@ -597,8 +597,25 @@ def dj_order(tracks: list[dict], seed_id: str) -> list[dict]:
     return out
 
 
-def similar(seed_id: str, limit: int = 40) -> list[dict]:
-    """Radio/mix: tracks by the same artist, album and genre, with a dice roll so it is not the same every time."""
+def _similarity(seed, r, dj: dict) -> dict:
+    """The parts a candidate's score is made of (see `similar`); `dj` is None when the pair is not analyzed."""
+    parts = {"random": random.random() * 2, "dj": None}
+    if seed["id"] in dj and r["id"] in dj:  # only where both are analyzed (DJ mode / background analysis)
+        parts["dj"] = dj_affinity(dj[seed["id"]], dj[r["id"]]) * 0.8
+    parts["artist"] = 3 if r["artist_id"] == seed["artist_id"] else 0
+    parts["album"] = 2 if seed["album_id"] and r["album_id"] == seed["album_id"] else 0
+    parts["genre"] = 2 if seed["genre"] and r["genre"] == seed["genre"] else 0
+    try:
+        parts["year"] = max(0, 1.5 - abs(int(r["year"]) - int(seed["year"])) / 5)
+    except ValueError:
+        parts["year"] = 0
+    return parts
+
+
+def similar(seed_id: str, limit: int = 40, explain: bool = False) -> list[dict]:
+    """Radio/mix: tracks by the same artist, album and genre, with a dice roll so it is not the same every time.
+
+    explain=True adds "dev" to every track (developer tools): the parts of its score, its rank and the score of the first track that did not make it."""
     with db.db() as c:
         seed = c.execute("SELECT * FROM lib_tracks WHERE id = ?", (seed_id,)).fetchone()
         if seed is None:
@@ -609,23 +626,27 @@ def similar(seed_id: str, limit: int = 40) -> list[dict]:
             (seed_id, seed["artist_id"], seed["album_id"], seed["genre"], seed["year"]),
         ).fetchall()
     dj = db.get_bpm_many([seed_id] + [r["id"] for r in rows])
-    def score(r) -> float:
-        s = random.random() * 2
-        if seed_id in dj and r["id"] in dj:  # only where both are analyzed (DJ mode / background analysis)
-            s += dj_affinity(dj[seed_id], dj[r["id"]]) * 0.8
-        s += 3 if r["artist_id"] == seed["artist_id"] else 0
-        s += 2 if seed["album_id"] and r["album_id"] == seed["album_id"] else 0
-        s += 2 if seed["genre"] and r["genre"] == seed["genre"] else 0
-        try:
-            s += max(0, 1.5 - abs(int(r["year"]) - int(seed["year"])) / 5)
-        except ValueError:
-            pass
-        return s
-    picked = sorted(rows, key=score, reverse=True)[:limit]
-    out = [_track(r) for r in picked]
+    scored = []
+    for r in rows:
+        parts = _similarity(seed, r, dj)
+        scored.append((sum(v for v in parts.values() if v is not None), parts, r))
+    ranked = sorted(scored, key=lambda x: x[0], reverse=True)
+    cutoff = ranked[limit][0] if len(ranked) > limit else None
+    out = []
+    for rank, (total, parts, r) in enumerate(ranked[:limit], 1):
+        t = _track(r)
+        if explain:
+            t["dev"] = {"kind": "similar", "seed": seed_id, "score": round(total, 2), "rank": rank, "candidates": len(ranked),
+                        "cutoff": None if cutoff is None else round(cutoff, 2),
+                        "parts": {k: None if v is None else round(v, 2) for k, v in parts.items()}}
+        out.append(t)
     if len(out) < limit:  # small library: fill up with random tracks
         have = {t["id"] for t in out} | {seed_id}
-        out += random_tracks(limit - len(out), have)
+        filler = random_tracks(limit - len(out), have)
+        if explain:
+            for t in filler:
+                t["dev"] = {"kind": "filler", "seed": seed_id}
+        out += filler
     return out
 
 

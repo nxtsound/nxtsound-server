@@ -57,6 +57,7 @@ secure by default, and the core stays free of any third-party service.
 | `autolists.py` | The computed "For you" lists. |
 | `loginalerts.py` | Login alerts: remembers each login (`login_history`) and, if its device or network is new for the user and the first one is long past, leaves a bell message. |
 | `playerhub.py` | Remote control: every visible page and every player with a queue keeps a server-sent-events stream (`GET /api/player/events`); players with a queue publish their state (`POST /api/player/state`). The stream pushes the list of the other devices when it changes (`devices` event: who plays what; the header dot follows it) and delivers commands (`POST /api/player/command`). `GET /api/player/devices` gives the same list on demand. In memory, one server process. |
+| `devtools.py` | The switch for the developer tools (`DEVTOOLS=1`, admins only). |
 | `devices.py` | Browser and system from a User-Agent, for the list of a user's devices (logins). |
 | `homewidgets.py` | The home page: catalog of widgets with their options, the default layout, checking a saved layout, building each widget's data. Add a widget: a spec in `specs()`, a builder in `_BUILDERS`, a view in `widgetHtml()` (`app.js`). |
 | `backup.py` | Backups to other places: the destinations (JSON in the settings), making a backup, keeping the last N, the schedule (`due`, `loop`), restoring from a destination. |
@@ -236,6 +237,21 @@ One page, no framework, no build: `static/index.html` + `app.js` (about 3,000 li
 - **Styling**: CSS variables for the theme, mobile first; the desktop layout adds a sidebar. `scrollbars.js` draws overlay scroll bars for mouse devices only.
 
 When you add UI: escape everything, add `tr()` to every visible string, test on a narrow viewport (phone) and a wide one, and check keyboard use.
+
+## Developer tools
+
+Start the server with `DEVTOOLS=1` and sign in as an admin: a small **DEV** button appears in the header. It opens a panel with
+
+- **Queue**: for every song of a radio the score it was chosen with, split into its parts (same artist, album, genre, year, tempo and key fit, dice roll). Tap the number on a queue row, or choose *Why this song? (developer)* in its menu, for the full explanation: the rank among all candidates and how far above the cut-off it was.
+- **Requests**: the last calls to the API with status and duration, as the browser saw them.
+
+How it works, so you can add to it:
+
+- `devtools.py` holds the switch. `devtools.active(user)` is true only with `DEVTOOLS=1` **and** an admin. Every route that hands out developer information asks it itself; hiding the panel in the page is not a protection. `GET /api/me` includes `"devtools": true` only then.
+- The explanation comes from the code that makes the decision, not from a second copy of it: `library.similar(..., explain=True)` returns the same ranking and adds a `dev` object to each track. A test checks that the parts add up to the score. Do the same for new decisions (return the parts, keep one place that computes them).
+- Ask for it with `?debug=1` (`GET /api/radio/{id}` does). Without the flag, or for anyone else, the answer is exactly the normal one.
+- The page loads `static/devtools.js` only when `/api/me` says so; normal users never download it. It is English only on purpose and does not use `tr()`.
+- Never put secrets or other users' data into a `dev` object. It is shown to an admin about *their own* session.
 
 ## Translations
 

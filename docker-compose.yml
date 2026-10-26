@@ -38,6 +38,7 @@ services:
       LOG_LEVEL_OTHER: "${LOG_LEVEL_OTHER:-}"
       ENRICH: "${ENRICH:-1}"
       ANALYZE: "${ANALYZE:-1}"
+      DEVTOOLS: "${DEVTOOLS:-0}"
       SCAN_MINUTES: "${SCAN_MINUTES:-0}"
       MUSIC_ACCESS: "${MUSIC_ACCESS:-ro}"
     volumes:
