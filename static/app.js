@@ -3363,7 +3363,6 @@ const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform ==
 const AC = IOS ? null : (window.AudioContext || window.webkitAudioContext);
 try {
   DJ.on = !!AC && localStorage.getItem('app_dj') === '1';
-  DJ.style = localStorage.getItem('app_dj_style') || 'auto';
   const fs = parseInt(localStorage.getItem('app_dj_fade'), 10);
   if (fs >= 2 && fs <= 12) DJ.fadeSec = fs;
   DJ.fadeFallback = localStorage.getItem('app_dj_fb') !== '0';
@@ -3371,7 +3370,7 @@ try {
 } catch (_) { /* without storage */ }
 const djSave = () => {
   try {
-    localStorage.setItem('app_dj', DJ.on ? '1' : '0'); localStorage.setItem('app_dj_style', DJ.style);
+    localStorage.setItem('app_dj', DJ.on ? '1' : '0');
     localStorage.setItem('app_dj_fade', String(DJ.fadeSec)); localStorage.setItem('app_dj_fb', DJ.fadeFallback ? '1' : '0');
     localStorage.setItem('app_dj_bridge', DJ.bridgeOn ? '1' : '0');
   } catch (_) { /* ignore */ }
@@ -3449,8 +3448,7 @@ function syncDj() {
   const b = $('#fDjBtn');
   b.hidden = !AC;
   b.classList.toggle('on', DJ.on);
-  const names = { auto: tr('Random'), blend: tr('Mix'), filter: tr('Filter'), echo: tr('Echo'), loop: tr('Loop'), bass: tr('Bass'), fade: tr('Crossfade') };
-  $('#fDjLbl').innerHTML = DJ.on ? `DJ <small>${names[DJ.style] || ''}</small>` : 'DJ';
+  $('#fDjLbl').textContent = 'DJ';
 }
 
 // On the first tap after start, build and unlock the audio context (iOS needs a gesture)
@@ -3887,10 +3885,8 @@ elA.addEventListener('error', () => { if (elA !== curEl && DJ.plan && DJ.plan.wa
 
 $('#fDjBtn').addEventListener('click', () => {
   if (!DJ.on) { djEnable(true); return; }
-  const styles = [['auto', tr('Random')], ['blend', tr('Mix (swap bass)')], ['filter', tr('Filter sweep')], ['echo', tr('Echo')], ['loop', tr('Loop roll')], ['bass', tr('Bass carry')], ['fade', tr('Crossfade')]];
   const next = { 3: 6, 6: 9, 9: 12 };
   sheetMenu(tr('DJ mode'), [
-    ...styles.map(([k, l]) => ({ label: (DJ.style === k ? '✓ ' : '') + tr('Style: {name}', { name: l }), fn: () => { DJ.style = k; djSave(); syncDj(); } })),
     { label: tr('Crossfade length: {n} s', { n: DJ.fadeSec }), fn: () => { DJ.fadeSec = next[DJ.fadeSec] || 3; djSave(); toast(tr('Crossfade length: {n} s', { n: DJ.fadeSec })); } },
     { label: (DJ.fadeFallback ? '✓ ' : '') + tr('Crossfade songs that cannot be matched on the beat'), fn: () => { DJ.fadeFallback = !DJ.fadeFallback; djSave(); } },
     ...(S.djBridge ? [{ label: (DJ.bridgeOn ? '✓ ' : '') + tr('Let the server make the transitions (sounds cleaner)'), fn: () => { DJ.bridgeOn = !DJ.bridgeOn; djSave(); } }] : []),
