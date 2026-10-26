@@ -207,6 +207,8 @@ the next song a few seconds after it. While it plays the screen says *Old song >
 (skipping plays the next song from its start). Songs from a plugin, and songs without a clear beat, are blended by the player as before. The menu has an option
 *Let the server make the transitions* to turn this off.
 
+**Styles:** *Random* (the default) picks a different style each time and avoids the last two. *Mix* swaps the bass from one song to the other, *Filter sweep* dulls the old song while the new one opens up, *Echo* lets the old song fade into an echo, *Loop roll* loops the last beats of the old song ever shorter and then cuts to the new song's bass, and *Bass carry* keeps only the old song's bass under the new song and then switches the bass over. Loop roll and Bass carry are made by the server only; for songs the player mixes itself they count as Random.
+
 **Crossfade:** in the DJ menu (tap the DJ button in the big player) choose the style *Crossfade* to simply fade one song out while the next fades in, without matching the tempo.
 The length (3, 6, 9 or 12 seconds) is in the same menu. With the option *Crossfade songs that cannot be matched on the beat* switched on (the default), the other styles fall back to a
 crossfade when two songs do not fit, instead of cutting from one to the next. Very short songs (under 30 seconds) and live streams are never blended.

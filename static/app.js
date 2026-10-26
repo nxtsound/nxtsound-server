@@ -3351,7 +3351,7 @@ function setMediaSession(t) {
 // Match the tempo, crossfade on the beat, with mix (bass swap), filter sweep or echo.
 // Only runs if both tracks have a detected tempo; otherwise it stays a normal track change.
 const DJ = {
-  on: false, style: 'auto', ctx: null, nodes: null, unlocked: false,
+  on: false, style: 'auto', recent: [], ctx: null, nodes: null, unlocked: false,
   info: {}, plan: null, mixing: false, timer: 0, warmSec: 6, rateTimer: 0,
   fadeSec: 6,        // length of a plain crossfade
   fadeFallback: true, // songs that cannot be matched on the beat are crossfaded instead of cut
@@ -3449,7 +3449,7 @@ function syncDj() {
   const b = $('#fDjBtn');
   b.hidden = !AC;
   b.classList.toggle('on', DJ.on);
-  const names = { auto: tr('Random'), blend: tr('Mix'), filter: tr('Filter'), echo: tr('Echo'), fade: tr('Crossfade') };
+  const names = { auto: tr('Random'), blend: tr('Mix'), filter: tr('Filter'), echo: tr('Echo'), loop: tr('Loop'), bass: tr('Bass'), fade: tr('Crossfade') };
   $('#fDjLbl').innerHTML = DJ.on ? `DJ <small>${names[DJ.style] || ''}</small>` : 'DJ';
 }
 
@@ -3486,7 +3486,7 @@ function djKeyFit(a, b) {
 
 function djPickStyle(lock, ctx = {}) {
   if (!lock) return DJ.last = 'echo';
-  if (DJ.style !== 'auto') return DJ.style;
+  if (['blend', 'filter', 'echo'].includes(DJ.style)) return DJ.style;  // ("loop" and "bass" are made by the server only: here they mean random)
   // Random without direct repetition. Clashing keys or an immediately loud entry: no bass swap, rather echo/filter
   const pool = [['blend', ctx.fit < 0 || ctx.hot ? 0 : 5], ['filter', 3], ['echo', ctx.hot || ctx.fit < 0 ? 5 : 2]].filter(([k, w]) => w > 0 && k !== DJ.last);
   let r = Math.random() * pool.reduce((s, [, w]) => s + w, 0);
@@ -3701,7 +3701,7 @@ function djTick() {
 // effect. The old song plays as usual. A few seconds before the transition the player fades over to the bridge, which begins with the old song (the same
 // music, so the fade is not heard), and a few seconds after the transition it fades over to the new song's own file (the bridge ends with the new song).
 // In between the bridge is the current element: play, pause, skip and seeking work on it like on any song. The screen says "Old > New" by "NxtSound DJ".
-const BRIDGE_FADE_IN = 0.6, BRIDGE_FADE_OUT = 2.0, BRIDGE_B_SYNC = 5.0, BRIDGE_B_WARM = 14;  // seconds
+const BRIDGE_FADE_IN = 0.6, BRIDGE_FADE_OUT = 0.5, BRIDGE_B_SYNC = 5.0, BRIDGE_B_WARM = 14;  // seconds
 
 function djBridgeWanted(t, nt, a, b) {
   return DJ.bridgeOn && a.usable && b.usable && S.djBridge && DJ.style !== 'fade' && /^local:/.test(t.id) && /^local:/.test(nt.id) && DJ.noBridge !== t.id + '>' + nt.id;
@@ -3712,7 +3712,7 @@ async function djBridgePrepare(t, nt) {
   DJ.plan = p;
   let r = null;
   try {
-    r = await api(`/dj/bridge?a=${encodeURIComponent(t.id)}&b=${encodeURIComponent(nt.id)}&style=${DJ.style}${DJ.last && DJ.last !== 'fade' ? '&avoid=' + DJ.last : ''}`, {}, 60000);
+    r = await api(`/dj/bridge?a=${encodeURIComponent(t.id)}&b=${encodeURIComponent(nt.id)}&style=${DJ.style}${DJ.recent.length ? '&avoid=' + DJ.recent.join(',') : ''}`, {}, 60000);
   } catch (_) { /* the player makes this transition itself */ }
   if (DJ.plan !== p) return;  // the song was changed or DJ mode stopped while the server worked
   const why = !r ? 'the server did not answer' : r.skip ? r.why : r.a_start - audio.currentTime < 2.5 ? 'it came too late' : '';
@@ -3723,6 +3723,7 @@ async function djBridgePrepare(t, nt) {
     info: { fit: r.info.fit, hot: r.info.hot, hasOutro: r.info.has_outro, bars: r.info.bars, mb: r.info.mb },
   });
   DJ.last = r.style;
+  DJ.recent = [r.style, ...DJ.recent].slice(0, 2);  // the server avoids the last two styles
   djNeutral(nodeOf(p.el), 0);
   p.el.playbackRate = 1;
   p.el.preload = 'auto';
@@ -3886,7 +3887,7 @@ elA.addEventListener('error', () => { if (elA !== curEl && DJ.plan && DJ.plan.wa
 
 $('#fDjBtn').addEventListener('click', () => {
   if (!DJ.on) { djEnable(true); return; }
-  const styles = [['auto', tr('Random')], ['blend', tr('Mix (swap bass)')], ['filter', tr('Filter sweep')], ['echo', tr('Echo')], ['fade', tr('Crossfade')]];
+  const styles = [['auto', tr('Random')], ['blend', tr('Mix (swap bass)')], ['filter', tr('Filter sweep')], ['echo', tr('Echo')], ['loop', tr('Loop roll')], ['bass', tr('Bass carry')], ['fade', tr('Crossfade')]];
   const next = { 3: 6, 6: 9, 9: 12 };
   sheetMenu(tr('DJ mode'), [
     ...styles.map(([k, l]) => ({ label: (DJ.style === k ? '✓ ' : '') + tr('Style: {name}', { name: l }), fn: () => { DJ.style = k; djSave(); syncDj(); } })),

@@ -69,6 +69,8 @@
  "Backups to other places": "Backups an andere Orte",
  "Band": "Band",
  "Based on what you listened to recently": "Passend zu dem, was du zuletzt gehört hast",
+ "Bass": "Bass",
+ "Bass carry": "Bass weiterreichen",
  "Because you listened to “{title}”": "Weil du „{title}“ gehört hast",
  "Because you listened to …": "Weil du … gehört hast",
  "Beta": "Beta",
@@ -265,6 +267,7 @@
  "Last scan {when}: {added} new, {updated} changed, {removed} removed": "Letzter Scan {when}: {added} neu, {updated} geändert, {removed} entfernt",
  "Later": "Später",
  "Latest additions to the library": "Zuletzt in die Bibliothek gekommen",
+ "Let the server make the transitions (sounds cleaner)": "Übergänge vom Server mischen lassen (klingt sauberer)",
  "Let’s go": "Los geht’s",
  "Library": "Bibliothek",
  "Library scan": "Bibliotheks-Scan",
@@ -300,6 +303,8 @@
  "Looking for updates …": "Suche nach Updates …",
  "Looking up …": "Schlägt gerade nach …",
  "Lookup started": "Nachschlagen gestartet",
+ "Loop": "Loop",
+ "Loop roll": "Loop-Roll",
  "Lyrics": "Text",
  "Menu": "Menü",
  "Mix": "Mix",
@@ -816,6 +821,5 @@
  "{where}: '{key}' is required (a non-empty text).": "{where}: '{key}' ist erforderlich (ein nicht leerer Text).",
  "“{name}” added": "„{name}“ hinzugefügt",
  "“{name}” installed, setting up": "„{name}“ installiert, wird eingerichtet",
- "“{title}” will no longer be recommended": "„{title}“ wird nicht mehr empfohlen",
- "Let the server make the transitions (sounds cleaner)": "Übergänge vom Server mischen lassen (klingt sauberer)"
+ "“{title}” will no longer be recommended": "„{title}“ wird nicht mehr empfohlen"
 }

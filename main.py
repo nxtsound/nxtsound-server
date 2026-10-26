@@ -1681,8 +1681,8 @@ def _analysis_of(track_id: str, path: Path) -> dict | None:
 
 
 @api.get("/dj/bridge")
-async def dj_bridge(a: str = Query(max_length=64), b: str = Query(max_length=64), style: str = Query("auto", pattern="^(auto|blend|filter|echo|fade)$"),
-                    avoid: str = Query("", pattern="^(|blend|filter|echo)$")):
+async def dj_bridge(a: str = Query(max_length=64), b: str = Query(max_length=64), style: str = Query("auto", pattern="^(auto|blend|filter|echo|loop|bass|fade)$"),
+                    avoid: str = Query("", pattern="^((blend|filter|echo|loop|bass)(,(blend|filter|echo|loop|bass))?)?$")):
     """The transition from song `a` into song `b`, made on the server (see djmix.py): the plan (times, style, stretch) and `url` of the audio file.
     {"skip": true, "why"} if there is none (a plugin song, no usable tempo analysis, no room before the end): the player then does the transition itself."""
     _check_id(a)

@@ -1,7 +1,7 @@
 """Makes a DJ bridge from two audio files, to listen to what the server would play (see djmix.py).
 
     python tools/render_bridge.py old.mp3 new.mp3 bridge.m4a                  random style
-    python tools/render_bridge.py old.mp3 new.mp3 bridge.m4a --style filter   blend, filter or echo
+    python tools/render_bridge.py old.mp3 new.mp3 bridge.m4a --style filter   blend, filter, echo, loop or bass
 
 The bridge starts with the last seconds before the transition (the old song as it is), then the transition, then the new song. It prints what it decided.
 Needs numpy and ffmpeg, like the server.
@@ -28,7 +28,7 @@ def main() -> int:
     ap.add_argument("old", type=Path)
     ap.add_argument("new", type=Path)
     ap.add_argument("out", type=Path)
-    ap.add_argument("--style", default="auto", choices=["auto", "blend", "filter", "echo"])
+    ap.add_argument("--style", default="auto", choices=["auto", *djmix.STYLES])
     args = ap.parse_args()
     if not djmix.available():
         print("numpy is needed (pip install numpy), and ffmpeg")

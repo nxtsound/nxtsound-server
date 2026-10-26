@@ -59,8 +59,10 @@ def test_a_loud_start_or_a_clash_of_keys_means_a_short_transition_without_bass_s
 
 def test_the_style_is_not_the_same_twice_and_is_repeatable():
     import random
-    styles = {djmix.pick_style(True, 1, False, "auto", "blend", random.Random(i)) for i in range(40)}
-    assert "blend" not in styles and styles <= {"filter", "echo"}
+    styles = {djmix.pick_style(True, 1, False, "auto", "blend,loop", random.Random(i)) for i in range(60)}
+    assert not styles & {"blend", "loop"} and styles == {"filter", "echo", "bass"}
+    assert {djmix.pick_style(True, 1, False, "auto", "", random.Random(i)) for i in range(80)} == set(djmix.STYLES)
+    assert "bass" not in {djmix.pick_style(True, -1, False, "auto", "", random.Random(i)) for i in range(80)}
     assert djmix.pick_style(True, 0, False, "auto", "", random.Random("x")) == djmix.pick_style(True, 0, False, "auto", "", random.Random("x"))
     assert djmix.pick_style(True, 0, False, "filter") == "filter" and djmix.pick_style(False, 0, False, "filter") == "echo"
 
@@ -96,10 +98,10 @@ def _pieces(seconds=40, sr=djmix.SR):
     return a, b
 
 
-PLAN = {"mix_sec": 8.0, "beat_a": 0.5, "style": "fade"}
+PLAN = {"mix_sec": 8.0, "beat_a": 0.5, "style": "fade", "swap": 4, "gap": True}
 
 
-@pytest.mark.parametrize("style", ["fade", "blend", "filter", "echo"])
+@pytest.mark.parametrize("style", ["fade", "blend", "filter", "echo", "loop", "bass"])
 def test_the_bridge_starts_with_the_old_song_and_ends_with_the_new_one(style):
     a, b = _pieces()
     out = djmix.mix_pieces(a, b, {**PLAN, "style": style})
@@ -258,3 +260,15 @@ def test_bridges_need_a_login(anon):
 def test_a_missing_bridge_is_a_404(alice):
     assert alice.get("/api/dj/bridge/" + "0" * 40 + ".m4a").status_code == 404 and alice.get("/api/dj/bridge/../../x.m4a").status_code in (404, 422)
     assert make_client("Bob").get("/api/dj/bridge/" + "1" * 40 + ".m4a").status_code == 404
+
+
+def test_the_loop_roll_repeats_ever_shorter_pieces_of_the_old_song():
+    a, _ = _pieces()
+    a = a * np.linspace(0.2, 1, len(a))[:, None].astype(np.float32)  # not periodic, so that repeats can be told from the original
+    i0, beat = int(2.0 * djmix.SR), 0.5
+    out = djmix._roll(a, i0, beat)
+    n = int(beat * djmix.SR)
+    assert np.array_equal(out[:i0], a[:i0]) and np.array_equal(out[i0 + 4 * n:], a[i0 + 4 * n:])  # only the four beats change
+    assert np.allclose(out[i0 + 40:i0 + n - 40], out[i0 + n + 40:i0 + 2 * n - 40], atol=1e-6)  # the first beat is played twice
+    tail = i0 + 3 * n + n // 2
+    assert np.allclose(out[tail + 40:tail + n // 8 - 40], out[tail + n // 8 + 40:tail + n // 4 - 40], atol=1e-6)  # and the last piece four times

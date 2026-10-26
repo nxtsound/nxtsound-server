@@ -63,20 +63,25 @@ def key_fit(a: dict, b: dict) -> int:
     return 1 if d <= 1 else 0 if d <= 2 else -1
 
 
+STYLES = ("blend", "filter", "echo", "loop", "bass")
+
+
 def pick_style(lock: bool, fit: int, hot: bool, style: str = "auto", avoid: str = "", rng=random) -> str:
-    """The style of a transition. Without tempo match only the echo works; otherwise the one asked for, or at random (never the one before)."""
+    """The style of a transition. Without tempo match only the echo works; otherwise the one asked for, or at random (never one of the last two:
+    `avoid` is a comma separated list)."""
     if not lock:
         return "echo"
-    if style in ("blend", "filter", "echo"):
+    if style in STYLES:
         return style
-    pool = [("blend", 0 if fit < 0 or hot else 5), ("filter", 3), ("echo", 5 if hot or fit < 0 else 2)]
-    pool = [(k, w) for k, w in pool if w > 0 and k != avoid]
+    pool = [("blend", 0 if fit < 0 or hot else 4), ("filter", 2), ("echo", 5 if hot or fit < 0 else 2), ("loop", 4), ("bass", 0 if fit < 0 or hot else 4)]
+    recent = avoid.split(",")
+    pool = [(k, w) for k, w in pool if w > 0 and k not in recent]
     r = rng.random() * sum(w for _, w in pool)
     for k, w in pool:
         r -= w
         if r < 0:
             return k
-    return pool[0][0]
+    return pool[0][0] if pool else "echo"
 
 
 def plan(a: dict, b: dict, a_dur: float, style: str = "auto", avoid: str = "", rng=random) -> dict:
@@ -120,6 +125,7 @@ def plan(a: dict, b: dict, a_dur: float, style: str = "auto", avoid: str = "", r
         if fit < 0 or hot:
             mb = min(mb, 8)
     mix = mb * beat_a
+    swap = max(4, int(0.75 * mb // 4) * 4)  # "bass": the bass moves over on a bar line, at about three quarters
     g_a = g * beat_a
     latest = end_a - mix
 
@@ -134,7 +140,8 @@ def plan(a: dict, b: dict, a_dur: float, style: str = "auto", avoid: str = "", r
     r3 = lambda v: round(float(v), 3)  # noqa: E731
     return {"skip": False, "style": st, "lock": lock, "rate": round(rate, 5), "bpm_a": r3(a["bpm"]), "bpm_b": r3(bb), "beat_a": r3(beat_a),
             "t_a": r3(t_a), "mix_sec": r3(mix), "x": r3(x), "a_start": r3(t_a - LEAD), "lead": LEAD, "tail": TAIL,
-            "info": {"fit": fit, "hot": hot, "has_outro": has_outro, "bars": bars, "mb": mb}}
+            "info": {"fit": fit, "hot": hot, "has_outro": has_outro, "bars": bars, "mb": mb},
+            "swap": swap, "gap": st == "bass" and rng.random() < 0.5}
 
 
 # ---------- Lining up ----------
@@ -213,6 +220,27 @@ def _sweep(x, cutoff, kind: str, n_fft: int = 2048, hop: int = 512):
     return (out / np.maximum(norm, 1e-6)[:, None])[pad:pad + n]
 
 
+def _roll(ax, i0: int, beat: float):
+    """`ax` where the four beats from sample `i0` are replaced by loops that get shorter: each piece is the start of its part of the music, repeated."""
+    out = ax.copy()
+    pos = i0
+    for length, reps in ((1.0, 2), (0.5, 2), (0.25, 2), (0.125, 4)):
+        n = int(round(length * beat * SR))
+        piece = ax[pos:pos + n].copy()
+        if len(piece) < n:
+            piece = np.pad(piece, ((0, n - len(piece)), (0, 0)))
+        ramp = min(n // 4, int(0.003 * SR))  # 3 ms at the seams: no clicks
+        if ramp > 1:
+            piece[:ramp] *= np.linspace(0, 1, ramp)[:, None]
+            piece[-ramp:] *= np.linspace(1, 0, ramp)[:, None]
+        for k in range(reps):
+            a0 = pos + k * n
+            if a0 + n <= len(out):
+                out[a0:a0 + n] = piece
+        pos += reps * n
+    return out
+
+
 def _up(x):
     return np.sin(np.pi / 2 * np.clip(x, 0.0, 1.0))
 
@@ -266,6 +294,22 @@ def mix_pieces(a, b_piece, p: dict, delta: float = 0.0):
         hp_b = _ramp(tau, 0, 0.7 * mix, 900.0, 10.0, exp=True)
         gb = np.where(tau < 0, 0.0, _up(tau / (0.4 * mix)))
         hp_a, echo_send = neutral_hp, None
+    elif st == "loop":  # A's last four beats are looped ever shorter (1/4, 1/8, 1/16, 1/32 bar), then the cut: B's bass takes over while B was only mids so far
+        roll = max(0.0, mix - 4 * beat)
+        ga = np.where(tau < mix, 1.0, 0.0)
+        hp_a = _ramp(tau, roll, 4 * beat, 10.0, 1500.0, exp=True)
+        hp_b = _ramp(tau, mix, 0.03, 450.0, 10.0)
+        gb = np.where(tau < mix, 0.9 * _up(tau / (0.6 * mix)), 1.0)
+        lp_a, echo_send = neutral_lp, None
+    elif st == "bass":  # A keeps only its bass, B comes in above it without bass; on the bar line the bass switches to B (before it, maybe a beat without any)
+        sw = p.get("swap", mix * 0.75)
+        lp_a = _ramp(tau, 0, 0.5 * sw, 20000.0, 150.0, exp=True)
+        if p.get("gap"):
+            lp_a = np.minimum(lp_a, _ramp(tau, sw - beat, 0.08, 20000.0, 25.0, exp=True))
+        ga = np.where(tau < sw, 1.0, 0.0)
+        hp_b = _ramp(tau, sw, 0.03, 450.0, 10.0)
+        gb = np.where(tau < 0, 0.0, _up(tau / (0.5 * sw)))
+        hp_a, echo_send = neutral_hp, None
     else:  # echo: A fades out into an echo, B comes in on the beat
         ga = np.where(tau < 0, 1.0, np.clip(1 - tau / (0.5 * beat), 0.0, 1.0))
         hp_b = _ramp(tau, 0, 2 * beat, 900.0, 10.0, exp=True)
@@ -277,8 +321,11 @@ def mix_pieces(a, b_piece, p: dict, delta: float = 0.0):
     a_fx = ax.copy()
     if st in ("blend",):
         a_fx[s0:] = _sweep(a_fx[s0:], hp_a[s0:], "hp")
-    if st == "filter":
+    if st in ("filter", "bass"):
         a_fx[s0:] = _sweep(a_fx[s0:], lp_a[s0:], "lp")
+    if st == "loop":
+        i0 = int(round((LEAD + max(0.0, mix - 4 * beat)) * SR))
+        a_fx[i0:] = _sweep(_roll(ax, i0, beat)[i0:], hp_a[i0:], "hp")
     a_out = np.where((tau < 0)[:, None], ax, a_fx * ga[:, None])  # identical to the old song until the transition begins
     if echo_send is not None:
         src = ax * echo_send[:, None]
@@ -325,7 +372,7 @@ def _key(a_id: str, b_id: str, a_path: Path, b_path: Path, p: dict) -> str:
         s = x.stat()
         return [s.st_size, int(s.st_mtime)]
     blob = json.dumps([RENDER_VERSION, bpmlib.ANALYSIS_VER, a_id, b_id, stat(a_path), stat(b_path),
-                       {k: p[k] for k in ("style", "rate", "t_a", "mix_sec", "x", "beat_a")}], sort_keys=True)
+                       {k: p[k] for k in ("style", "rate", "t_a", "mix_sec", "x", "beat_a", "swap", "gap")}], sort_keys=True)
     return hashlib.sha1(blob.encode()).hexdigest()
 
 
