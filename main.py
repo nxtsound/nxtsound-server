@@ -41,6 +41,7 @@ import devices
 import devsnapshot
 import devtools
 import djmix
+import stems
 import enrich
 import homewidgets
 import i18n
@@ -1023,7 +1024,7 @@ def server_info():
         "name": APP_NAME,
         "version": VERSION_INFO["version"],
         "api_version": API_VERSION,
-        "functions": ["library", "search", "playlists", "likes", "history", "recommendations", "dj_analysis", "lyrics", "plugins"] + (["dj_bridge"] if djmix.available() else []),
+        "functions": ["library", "search", "playlists", "likes", "history", "recommendations", "dj_analysis", "lyrics", "plugins"] + (["dj_bridge"] if djmix.available() else []) + (["dj_stems"] if djmix.available() and stems.available() else []),
         "login_methods": ["password"],
         "setup_required": db.count_users() == 0,
     }
@@ -1680,6 +1681,10 @@ def _analysis_of(track_id: str, path: Path) -> dict | None:
     return db.get_bpm(track_id)
 
 
+_bridge_jobs: dict[str, asyncio.Future] = {}
+BRIDGE_WAIT = 20.0  # seconds a request waits for the bridge before it answers "not yet"
+
+
 @api.get("/dj/bridge")
 async def dj_bridge(a: str = Query(max_length=64), b: str = Query(max_length=64), style: str = Query("auto", pattern="^(auto|blend|filter|echo|loop|bass|fade)$"),
                     avoid: str = Query("", pattern="^((blend|filter|echo|loop|bass)(,(blend|filter|echo|loop|bass))?)?$")):
@@ -1701,7 +1706,16 @@ async def dj_bridge(a: str = Query(max_length=64), b: str = Query(max_length=64)
             row = c.execute("SELECT duration FROM lib_tracks WHERE id = ?", (a,)).fetchone()
         return djmix.make(a, b, pa, pb, ia or {}, ib or {}, float(row["duration"] if row else 0), style, avoid)
 
-    res = await asyncio.get_running_loop().run_in_executor(None, work)
+    # A bridge can take a while (separating the singing of both songs): the work goes on in the background and the player asks again
+    job_id = f"{a}|{b}|{style}|{avoid}"
+    job = _bridge_jobs.get(job_id)
+    if job is None:
+        job = _bridge_jobs[job_id] = asyncio.get_running_loop().run_in_executor(None, work)
+        job.add_done_callback(lambda _f: _bridge_jobs.pop(job_id, None))
+    try:
+        res = await asyncio.wait_for(asyncio.shield(job), timeout=BRIDGE_WAIT)
+    except asyncio.TimeoutError:
+        return {"pending": True, "retry": 3}
     if not res.get("skip"):
         res["url"] = f"/api/dj/bridge/{res['key']}.m4a"
     return res

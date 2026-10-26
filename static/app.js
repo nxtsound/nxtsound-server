@@ -80,6 +80,7 @@ const audio = new Proxy(elA, {
 // Project name from the server (configured centrally) so it is never hardcoded in the frontend
 fetch('/api/server-info').then((r) => r.json()).then((i) => {
   S.djBridge = (i.functions || []).includes('dj_bridge');  // the server can make DJ transitions
+  S.djStems = (i.functions || []).includes('dj_stems');    // ... and leaves the singing alone (takes longer: the player asks earlier)
   if (!i.name) return;
   document.title = i.name;
   document.querySelectorAll('[data-appname]').forEach((el) => { el.textContent = i.name; });
@@ -3676,7 +3677,7 @@ function djTick() {
   const fadeOnly = DJ.style === 'fade';
   if (!t || !nt || S.repeat === 'one' || !isFinite(dur) || dur < (fadeOnly || DJ.fadeFallback ? 30 : 60) || dur >= 600 || S.loading) return;
   if (!fadeOnly && audio.currentTime < 3) djFetch(t);
-  if (dur - audio.currentTime > 140) return;
+  if (dur - audio.currentTime > (S.djStems ? 300 : 140)) return;
   if (!fadeOnly) { djFetch(t); djFetch(nt); }
   if (!p) {
     const a = DJ.info[t.id], b = DJ.info[nt.id];
@@ -3709,16 +3710,22 @@ async function djBridgePrepare(t, nt) {
   const p = { bridge: true, pending: true, id: nt.id, from: t.id, skip: false, warm: false, started: false, switched: false, fade: false, stage: 'wait', hand: null };
   DJ.plan = p;
   let r = null;
-  try {
-    r = await api(`/dj/bridge?a=${encodeURIComponent(t.id)}&b=${encodeURIComponent(nt.id)}&style=${DJ.style}${DJ.recent.length ? '&avoid=' + DJ.recent.join(',') : ''}`, {}, 60000);
-  } catch (_) { /* the player makes this transition itself */ }
-  if (DJ.plan !== p) return;  // the song was changed or DJ mode stopped while the server worked
+  for (;;) {  // the server may need a while (it answers "pending" and goes on working)
+    try {
+      r = await api(`/dj/bridge?a=${encodeURIComponent(t.id)}&b=${encodeURIComponent(nt.id)}&style=${DJ.style}${DJ.recent.length ? '&avoid=' + DJ.recent.join(',') : ''}`, {}, 60000);
+    } catch (_) { r = null; /* the player makes this transition itself */ }
+    if (DJ.plan !== p) return;  // the song was changed or DJ mode stopped while the server worked
+    if (!r || !r.pending) break;
+    if (audio.duration - audio.currentTime < 15) { r = null; break; }  // too late now
+    await new Promise((res) => setTimeout(res, (r.retry || 3) * 1000));
+    if (DJ.plan !== p) return;
+  }
   const why = !r ? 'the server did not answer' : r.skip ? r.why : r.a_start - audio.currentTime < 2.5 ? 'it came too late' : '';
   if (why) { DJ.noBridge = t.id + '>' + nt.id; DJ.plan = null; evlog('No bridge: ' + why); return; }
   Object.assign(p, {
     pending: false, el: otherEl(), dur: r.duration, a0: r.a_start, mixSec: r.mix_sec, tA: r.t_a, style: r.style, lock: r.lock, rate: r.rate, beatA: r.beat_a,
     bpmB: r.bpm_b, X: r.x, bResume: r.b_resume, align: { ms: r.align_ms, strength: r.align_strength }, title: `${t.title} > ${nt.title}`,
-    info: { fit: r.info.fit, hot: r.info.hot, hasOutro: r.info.has_outro, bars: r.info.bars, mb: r.info.mb },
+    info: { fit: r.info.fit, hot: r.info.hot, hasOutro: r.info.has_outro, bars: r.info.bars, mb: r.info.mb }, vocals: r.vocals || null,
   });
   DJ.last = r.style;
   DJ.recent = [r.style, ...DJ.recent].slice(0, 2);  // the server avoids the last two styles

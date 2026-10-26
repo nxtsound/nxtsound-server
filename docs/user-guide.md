@@ -209,6 +209,8 @@ the next song a few seconds after it. While it plays the screen says *Old song >
 
 **Styles:** you do not choose them; the DJ picks what suits the two songs (tempo, key, how the new song starts) and avoids the last two. Songs with very different tempi are not matched; they get an echo, a cut or a reverb wash. It has seven: a bass swap, a filter sweep, an echo, a hard *cut* (the old song rings out in a small room), a *reverb* wash, a *loop roll* (the last beats of the old song looped ever shorter, then a cut to the new song's bass) and *bass carry* (only the old song's bass stays under the new song, then the bass switches over).
 
+**Singing:** if the server has the optional stem image (`DJ_STEMS=1`, see the configuration), it separates the singing from the music. The DJ then lets the old singer finish the phrase, keeps the new singer out until the old one has stopped and brings them in at the start of a phrase, so that nobody is cut off in the middle of a line and two voices do not sing over each other. Without it the singing is treated like the rest of the music.
+
 **Crossfade:** songs that cannot be matched are simply faded into each other, without matching the tempo. The length (3, 6, 9 or 12 seconds) is in the DJ menu (tap the DJ button in the big player). With the option *Crossfade songs that cannot be matched on the beat* switched on (the default), the other styles fall back to a
 crossfade when two songs do not fit, instead of cutting from one to the next. Very short songs (under 30 seconds) and live streams are never blended.
 

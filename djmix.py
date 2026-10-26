@@ -24,6 +24,7 @@ from pathlib import Path
 
 import bpm as bpmlib
 import db
+import stems
 
 try:
     import numpy as np
@@ -39,7 +40,7 @@ MAX_LOCK = 0.08       # the new song is stretched to the old one's tempo if they
 MIN_CONF = 0.35       # the analysis must be this sure
 MAX_ALIGN_MS = 80     # the correction found by comparing drum onsets is accepted up to this
 MIN_ALIGN_STRENGTH = 0.15
-RENDER_VERSION = 2    # raise when the sound of a bridge changes: old files are not reused
+RENDER_VERSION = 3    # raise when the sound of a bridge changes: old files are not reused
 BRIDGE_DIR = Path(os.getenv("DJ_BRIDGE_DIR") or Path(db.DB_PATH).parent / "dj-bridges")  # next to the database, in the data volume
 MAX_BYTES = int(float(os.getenv("DJ_BRIDGE_MB", "300")) * 1024 * 1024)
 ENABLED = os.getenv("DJ_BRIDGES", "1") != "0"
@@ -289,9 +290,70 @@ def _ramp(tau, start: float, length: float, a: float, b: float, exp: bool = Fals
     return a * (b / a) ** f if exp else a + (b - a) * f
 
 
-def mix_pieces(a, b_piece, p: dict, delta: float = 0.0):
+def _vocal_ride(va, vb, mix: float, beat: float, n: int, report: dict | None = None):
+    """What the singing does while the music changes (`va`, `vb`: the vocal tracks of the old and the new song, placed on the bridge's clock).
+    The old singer is let finish: until the first pause of 0.35 s or more in the transition (or, without one, until a beat before its end), then it stops
+    with a short reverb. The new singer is kept out until then, and comes in at the first start of a phrase after that (or at once if it sings without a break).
+    -> the singing to add to the bridge, from the transition on."""
+    hop = int(0.05 * SR)
+    frames = n // hop
+
+    def envelope(v):
+        k = min(frames, len(v) // hop)
+        e = np.zeros(frames)
+        e[:k] = np.sqrt((v[:k * hop].mean(axis=1).reshape(k, hop) ** 2).mean(axis=1))
+        return e
+
+    def active(e, hi_frame):
+        loud = e[:hi_frame]
+        thr = max(0.15 * float(np.percentile(loud[loud > 0], 95)) if (loud > 0).any() else 0.0, 0.003)
+        return e > thr
+
+    f0, f1 = int(LEAD / 0.05), int((LEAD + mix) / 0.05)
+    act_a, act_b = active(envelope(va), f1), active(envelope(vb), min(frames, f1 + int(TAIL / 0.05)))
+    gap = 7  # frames of silence that count as a pause (0.35 s)
+    stop_f = None
+    for f in range(f0, max(f0, f1 - int(0.5 * beat / 0.05))):
+        if not act_a[f:f + gap].any():
+            stop_f = f
+            break
+    t_stop = LEAD + mix - beat if stop_f is None else stop_f * 0.05
+    fade_out = beat if stop_f is None else 0.04
+    # the new singer: the first start of a phrase after the old one stopped, but not later than 3 s after the transition
+    t_in, latest = None, LEAD + mix + 3.0
+    for f in range(max(1, int(t_stop / 0.05)), min(frames, int(latest / 0.05))):
+        if act_b[f] and not act_b[max(0, f - gap):f].any():
+            t_in = f * 0.05 - 0.03
+            break
+    fade_in = 0.04
+    if t_in is None:
+        t_in, fade_in = t_stop, 0.08  # it sings without a break: it comes in where the old one stopped
+    t = np.arange(n) / SR
+    g_a = np.where(t < t_stop, 1.0, np.clip(1.0 - (t - t_stop) / fade_out, 0.0, 1.0))
+    g_a = np.where(t < LEAD, 0.0, g_a)  # until the transition the bridge has the old song as it is, with its singing
+    g_b = np.clip((t - t_in) / fade_in, 0.0, 1.0)
+    out = va * g_a[:, None] + vb * g_b[:, None]
+    k1 = int(t_stop * SR)
+    k0 = max(0, k1 - int(0.3 * SR))
+    ring = _reverb(va[k0:k1] * np.linspace(0.3, 1.0, k1 - k0)[:, None].astype(np.float32), 0.35, 1.6) * 0.5
+    ring = _sweep(np.pad(ring, ((0, SR // 8), (0, 0))), np.full(len(ring) + SR // 8, 200.0), "hp")[: len(ring)]
+    ring = ring[k1 - k0:]
+    k = min(len(ring), n - k1)
+    if k > 0:
+        out[k1:k1 + k] += ring[:k]
+    if report is not None:
+        both = act_a[:frames] & act_b[:frames]
+        win = slice(f0, f1)
+        heard = both & (g_a[::hop][:frames] > 0.5) & (g_b[::hop][:frames] > 0.5)
+        report.update(a_stop=round(t_stop - LEAD, 2), a_pause=stop_f is not None, b_in=round(t_in - LEAD, 2), b_phrase=fade_in == 0.04,
+                      overlap_s=round(float(heard[win].sum()) * 0.05, 2), would_overlap_s=round(float(both[win].sum()) * 0.05, 2))
+    return out
+
+
+def mix_pieces(a, b_piece, p: dict, delta: float = 0.0, vocals=None, report: dict | None = None):
     """The bridge as float32 stereo: `a` is the old song from `a_start` (at least LEAD + mix seconds), `b_piece` the new one from `x`, already stretched.
-    The first LEAD seconds are the old song untouched; the effect starts with the transition, `delta` s later or earlier for the new song."""
+    The first LEAD seconds are the old song untouched; the effect starts with the transition, `delta` s later or earlier for the new song.
+    `vocals` (optional): the vocal tracks of `a` and `b_piece`. Then the effect works on the music without the singing and the singing is led on its own."""
     mix, beat, st = p["mix_sec"], p["beat_a"], p["style"]
     total = LEAD + mix + TAIL
     n = int(round(total * SR))
@@ -310,8 +372,25 @@ def mix_pieces(a, b_piece, p: dict, delta: float = 0.0):
     else:
         k = min(len(b_piece) + off, n)
         bx[:k] = b_piece[-off:-off + k]
+    va = vb = None
+    if vocals is not None:
+        va = np.zeros_like(ax)
+        va[:m] = vocals[0][:m]
+        va[int((LEAD + mix) * SR):] = 0
+        vb = np.zeros_like(bx)
+        if off >= 0:
+            if k > 0:
+                vb[off:off + k] = vocals[1][:k]
+        else:
+            vb[:k] = vocals[1][-off:-off + k]
     if p.get("level"):
-        bx *= _level_gain(ax, bx, mix, n)[:, None]
+        g = _level_gain(ax, bx, mix, n)[:, None]
+        bx *= g
+        if vb is not None:
+            vb *= g
+    ax_full = ax
+    if va is not None:
+        ax, bx = ax - va, bx - vb  # the music without the singing (what the model did not catch stays in it, so that both add up to the song again)
     s0 = max(0, int((LEAD - 0.3) * SR))  # the effects begin here; before it the old song stays as it is
     neutral_hp, neutral_lp = np.full(n, 10.0), np.full(n, 20000.0)
 
@@ -367,7 +446,7 @@ def mix_pieces(a, b_piece, p: dict, delta: float = 0.0):
     if st in ("cut", "reverb"):  # what A leaves in the room: its last stretch (a quarter beat for the cut, a whole beat for the wash) goes through the reverb
         k0 = int((LEAD - (0.25 if st == "cut" else 1.0) * beat) * SR)
         k1 = int(LEAD * SR)
-        tail = ax[k0:k1] * np.linspace(0.3, 1.0, k1 - k0)[:, None].astype(np.float32)
+        tail = ax_full[k0:k1] * np.linspace(0.3, 1.0, k1 - k0)[:, None].astype(np.float32)
         wet = _reverb(tail, 0.25 if st == "cut" else 0.7, 1.2 if st == "cut" else 4.0) * (0.55 if st == "cut" else 0.8)
         wet = _sweep(np.pad(wet, ((0, SR // 8), (0, 0))), np.full(len(wet) + SR // 8, 180.0), "hp")[: len(wet)]  # no mud in the bass
 
@@ -379,9 +458,9 @@ def mix_pieces(a, b_piece, p: dict, delta: float = 0.0):
     if st == "loop":
         i0 = int(round((LEAD + max(0.0, mix - 4 * beat)) * SR))
         a_fx[i0:] = _sweep(_roll(ax, i0, beat)[i0:], hp_a[i0:], "hp")
-    a_out = np.where((tau < 0)[:, None], ax, a_fx * ga[:, None])  # identical to the old song until the transition begins
+    a_out = np.where((tau < 0)[:, None], ax_full, a_fx * ga[:, None])  # identical to the old song until the transition begins
     if echo_send is not None:
-        src = ax * echo_send[:, None]
+        src = ax_full * echo_send[:, None]
         delay = int(round(0.75 * beat * SR))
         for k in range(1, 7):  # a few repeats, each softer
             sh = k * delay
@@ -391,6 +470,8 @@ def mix_pieces(a, b_piece, p: dict, delta: float = 0.0):
     b_out = np.zeros_like(bx)
     b_out[s0:] = b_fx * gb[s0:, None]
     out = a_out + b_out
+    if va is not None:
+        out += _vocal_ride(va, vb, mix, beat, n, report)
     if wet is not None:
         w0 = int(LEAD * SR)  # the room rings on from where A is cut or starts to fade; what the reverb made before that is already part of A
         ring = wet[w0 - k0:]
@@ -414,12 +495,18 @@ def render(a_path: Path, b_path: Path, p: dict, dest: Path) -> dict:
     mix, rate = p["mix_sec"], p["rate"]
     a = _decode(a_path, p["a_start"], LEAD + mix + 0.5)
     b = _decode(b_path, p["x"], (mix + TAIL + 1.0) * rate, rate)  # stretched: (mix + TAIL + 1) seconds long
-    pcm = mix_pieces(a, b, {**p, "level": True}, -shift)  # B's beats fall `shift` s late: it has to start that much earlier
+    vocals, report = None, {}
+    if stems.available():
+        try:
+            vocals = (stems.vocals(a), stems.vocals(b))
+        except Exception as e:  # no model, no memory: a bridge without it is still a bridge
+            log.warning("stems: not used for this bridge: %s", e)
+    pcm = mix_pieces(a, b, {**p, "level": True}, -shift, vocals, report)  # B's beats fall `shift` s late: it has to start that much earlier
     dest.parent.mkdir(parents=True, exist_ok=True)
     _encode(pcm, dest)
     total = len(pcm) / SR
     started = LEAD - shift  # where on the bridge's clock the new song's piece begins
-    return {"align_ms": round(-shift * 1000, 1), "align_strength": round(strength, 2), "duration": round(total, 3),
+    return {"align_ms": round(-shift * 1000, 1), "align_strength": round(strength, 2), "duration": round(total, 3), "vocals": report or None,
             "b_resume": round(p["x"] + rate * (total - started), 3)}
 
 
@@ -429,7 +516,7 @@ def _key(a_id: str, b_id: str, a_path: Path, b_path: Path, p: dict) -> str:
     def stat(x: Path) -> list:
         s = x.stat()
         return [s.st_size, int(s.st_mtime)]
-    blob = json.dumps([RENDER_VERSION, bpmlib.ANALYSIS_VER, a_id, b_id, stat(a_path), stat(b_path),
+    blob = json.dumps([RENDER_VERSION, bpmlib.ANALYSIS_VER, stems.available(), a_id, b_id, stat(a_path), stat(b_path),
                        {k: p[k] for k in ("style", "rate", "t_a", "mix_sec", "x", "beat_a", "swap", "gap")}], sort_keys=True)
     return hashlib.sha1(blob.encode()).hexdigest()
 

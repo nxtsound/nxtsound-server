@@ -236,6 +236,10 @@
         rows.push(row('length', `${info.mb} beats = ${f1(p.mixSec)} s, entering the new song at ${f1(p.X)} s`));
       } else rows.push(row('length', `${f1(p.mixSec)} s`));
       rows.push(row('starts at', `${f1(p.tA)} s of the old song`));
+      if (p.bridge) {
+        const vo = p.vocals;
+        rows.push(row('singing', vo ? `the old singer ${vo.a_pause ? 'stops at a pause' : 'is cut a beat before the end (no pause)'} at ${f1(vo.a_stop)} s, the new one comes in at ${f1(vo.b_in)} s${vo.b_phrase ? ' at the start of a phrase' : ' (it sings without a break)'}; both audible together: ${f1(vo.overlap_s)} s (without this: ${f1(vo.would_overlap_s)} s)` : 'not separated (the server has no stem model): the singing is treated like the rest of the music'));
+      }
     }
     const v = verdict(e), m = e.m;
     if (p.bridge) rows.unshift(row('made by', `<b>the server</b>: a ${f1(p.dur)} s file, the pieces lined up to the sample${p.align ? ` (corrected by ${f1(p.align.ms)} ms after comparing the drums, ${Math.round(p.align.strength * 100)} % sure)` : ''}`));

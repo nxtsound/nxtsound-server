@@ -41,6 +41,8 @@ services:
       DEVTOOLS: "${DEVTOOLS:-0}"
       DJ_BRIDGES: "${DJ_BRIDGES:-1}"
       DJ_BRIDGE_MB: "${DJ_BRIDGE_MB:-300}"
+      DJ_STEMS: "${DJ_STEMS:-0}"
+      DJ_STEMS_THREADS: "${DJ_STEMS_THREADS:-4}"
       SCAN_MINUTES: "${SCAN_MINUTES:-0}"
       MUSIC_ACCESS: "${MUSIC_ACCESS:-ro}"
     volumes:

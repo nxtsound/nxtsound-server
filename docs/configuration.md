@@ -27,6 +27,9 @@ Settings marked **admin area** can also be changed at runtime there, and the adm
 | `ANALYZE` | `1` | Analyze new tracks in the background (tempo, key, intro and outro) for DJ mode and the DJ fit. `0` = off. |
 | `DEVTOOLS` | `0` | `1` turns on the [developer tools](developer-guide.md#developer-tools) for admins: why a song is in the radio (the parts of its score), the plan of each DJ transition, the analysis curves, the home page seeds, calls to plugins, a fixed dice and a snapshot for bug reports. Meant for people working on the code. |
 | `DJ_BRIDGES` | `1` | `0` turns off the DJ transitions made by the server (the player then blends the songs itself). They need numpy and ffmpeg, like the analysis. |
+| `DJ_STEMS` | `0` | `1` leaves the singing alone in DJ transitions: the vocals of both songs are separated with the Demucs model and led on their own (the old singer finishes the phrase, the new one comes in at a phrase). Needs PyTorch and `demucs`, which the normal image does not have: build `Dockerfile.stems` (see the developer guide). About 2 GB of memory while a transition is made, 10 to 60 s per transition on a small server (the player asks early and the result is kept). |
+| `DJ_STEMS_THREADS` | `4` | Processor threads for the separation (at most the number of cores). |
+| `DJ_STEMS_DIR` | `<data folder>/models` | Where the model is kept (the stem image has it built in). |
 | `DJ_BRIDGE_MB` | `300` | How much room the finished transitions may take (about 0.4 MB each); the least recently used go first. Kept in `<data folder>/dj-bridges`, or in `DJ_BRIDGE_DIR`. |
 | `BEAT_ML` | `0` | `1` uses the optional `beat_this` model (needs PyTorch) for beat detection. Experimental. |
 | `ENRICH` | `1` | Fetch missing year, cover and artist description from MusicBrainz and the Cover Art Archive. `0` = off. **Admin area.** |

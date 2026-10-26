@@ -1,0 +1,18 @@
+# NxtSound with the vocal separation for the DJ (DJ_STEMS=1): the normal image plus PyTorch (CPU), demucs and the htdemucs model. About 1.5 GB larger.
+#
+#   docker build -f Dockerfile.stems --build-arg BASE=ghcr.io/nxtsound/nxtsound-server:beta -t nxtsound-server-stems .
+#
+# Run it like the normal image, with DJ_STEMS=1. It needs about 2 GB of free memory while a transition is made.
+ARG BASE=ghcr.io/nxtsound/nxtsound-server:latest
+FROM ${BASE}
+
+USER root
+RUN mkdir -p /opt/models && chown app:app /opt/models
+USER app
+ENV TORCH_HOME=/opt/models
+RUN pip install --no-cache-dir --user torch torchaudio --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir --user demucs \
+    && python -c "from demucs.pretrained import get_model; get_model('htdemucs')"
+
+# like the base image: the entrypoint runs as root for a moment and then continues as the app user
+USER root

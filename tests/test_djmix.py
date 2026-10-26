@@ -8,6 +8,7 @@ import pytest
 import bpm
 import djmix
 import main
+import stems
 from conftest import make_client
 
 needs_audio = pytest.mark.skipif(not (djmix.available() and shutil.which("ffmpeg")), reason="needs numpy and ffmpeg")
@@ -305,3 +306,93 @@ def test_the_room_of_the_cut_rings_on_after_the_old_song_stopped():
     after = np.abs(out[lead + int(0.05 * djmix.SR): lead + int(0.3 * djmix.SR)]).max()
     assert 0.001 < after < np.abs(a[:lead]).max()  # something is there, softer than the song
     assert np.abs(out[lead + int(1.6 * djmix.SR):]).max() < 1e-3  # and it dies away
+
+
+# ---------- Vocal tracks (stems) ----------
+
+def _sing(seconds, spans, sr=djmix.SR, amp=0.3):
+    """A 'vocal track': a tone that sounds in the given (start, end) spans of seconds, silence elsewhere."""
+    t = np.arange(int(seconds * sr)) / sr
+    on = np.zeros(len(t), dtype=bool)
+    for s, e in spans:
+        on |= (t >= s) & (t < e)
+    v = (amp * np.sin(2 * np.pi * 700 * t) * on).astype(np.float32)
+    return np.stack([v, v], axis=1)
+
+
+@pytest.mark.parametrize("style", ["blend", "filter", "echo", "loop", "bass", "cut", "reverb"])
+def test_with_vocal_tracks_the_bridge_still_starts_and_ends_as_the_songs(style):
+    a, b = _pieces()
+    plan = {**PLAN, "style": style}
+    out = djmix.mix_pieces(a, b, plan, 0.0, (0.5 * a, 0.5 * b))  # half of each song is "singing"
+    lead, mix = int(djmix.LEAD * djmix.SR), int(PLAN["mix_sec"] * djmix.SR)
+    assert np.array_equal(out[:lead], a[:lead])
+    tail = out[lead + mix + djmix.SR: lead + mix + 5 * djmix.SR]
+    want = b[mix + djmix.SR: mix + 5 * djmix.SR]
+    assert np.corrcoef(tail[:, 0], want[:, 0])[0, 1] > 0.98 and np.abs(out).max() <= 1.0
+
+
+def test_the_old_singer_finishes_its_phrase_and_the_new_one_comes_in_at_a_phrase():
+    a, b = _pieces()
+    lead = djmix.LEAD
+    va = _sing(len(a) / djmix.SR, [(0, lead + 2.0), (lead + 3.5, 40)])  # sings, a pause 2 s into the transition, sings on
+    vb = _sing(len(b) / djmix.SR, [(4.0, 40)])  # is silent first, starts at 4 s (a phrase)
+    rep = {}
+    out = djmix.mix_pieces(a + va, b + vb, {**PLAN, "style": "cut"}, 0.0, (va, vb), rep)  # the songs contain their singing
+    assert rep["a_pause"] and rep["a_stop"] == pytest.approx(2.0, abs=0.06)  # at the start of the pause
+    assert rep["b_phrase"] and rep["b_in"] == pytest.approx(4.0 - 0.03, abs=0.06)  # at the start of the phrase, not before
+    # between the old singer's stop and the new one's start there is no singing on top of the music (the tone is at 700 Hz)
+    spec = lambda s0, s1: np.abs(np.fft.rfft(out[int((lead + s0) * djmix.SR):int((lead + s1) * djmix.SR), 0]))  # noqa: E731
+    fr = np.fft.rfftfreq(int(1.0 * djmix.SR), 1 / djmix.SR)
+    band = (fr > 680) & (fr < 720)
+    assert spec(2.5, 3.5)[band].max() < 0.05 * spec(-1.0, 0.0)[band].max()  # (the music itself has hardly any energy there: 220 Hz and noise)
+
+
+def test_a_singer_without_a_pause_is_cut_a_beat_before_the_end_and_the_new_one_that_sings_at_once_comes_in_there():
+    a, b = _pieces()
+    seconds = len(a) / djmix.SR
+    rep = {}
+    djmix.mix_pieces(a, b, {**PLAN, "style": "echo"}, 0.0, (_sing(seconds, [(0, 40)]), _sing(len(b) / djmix.SR, [(0, 40)])), rep)
+    assert not rep["a_pause"] and rep["a_stop"] == pytest.approx(PLAN["mix_sec"] - PLAN["beat_a"], abs=0.06)
+    assert not rep["b_phrase"] and rep["b_in"] == pytest.approx(rep["a_stop"], abs=0.06)
+
+
+@needs_audio
+def test_a_slow_bridge_is_answered_with_pending_and_is_there_at_the_next_request(clicks, monkeypatch):
+    import threading
+    import time
+    c, ids = clicks
+    release = threading.Event()
+    real = djmix.make
+
+    def slow(*args, **kw):
+        release.wait(10)
+        return real(*args, **kw)
+
+    monkeypatch.setattr(djmix, "make", slow)
+    monkeypatch.setattr(main, "BRIDGE_WAIT", 0.2)
+    q = {"a": ids["Click A"], "b": ids["Click B"], "style": "echo"}
+    first = c.get("/api/dj/bridge", params=q).json()
+    assert first == {"pending": True, "retry": 3}
+    assert c.get("/api/dj/bridge", params=q).json().get("pending")  # still the same job, not a second one
+    release.set()
+    for _ in range(100):
+        r = c.get("/api/dj/bridge", params=q).json()
+        if not r.get("pending"):
+            break
+        time.sleep(0.1)
+    assert not r["skip"] and r["url"].endswith(".m4a")
+
+
+@needs_audio
+def test_with_a_stem_model_the_bridge_is_made_with_the_singing_led_on_its_own(clicks, monkeypatch):
+    c, ids = clicks
+    monkeypatch.setattr(stems, "ENABLED", True)
+    monkeypatch.setattr(stems, "available", lambda: True)
+    monkeypatch.setattr(stems, "vocals", lambda x: (0.3 * x).astype(np.float32))  # a stand-in for the model
+    r = c.get("/api/dj/bridge", params={"a": ids["Click A"], "b": ids["Click B"], "style": "blend"}).json()
+    assert not r["skip"] and r["vocals"] and {"a_stop", "b_in", "overlap_s", "would_overlap_s"} <= set(r["vocals"])
+    assert "dj_stems" in c.get("/api/server-info").json()["functions"]
+    monkeypatch.setattr(stems, "vocals", lambda x: (_ for _ in ()).throw(RuntimeError("no model")))
+    r2 = c.get("/api/dj/bridge", params={"a": ids["Click A"], "b": ids["Click B"], "style": "filter"}).json()
+    assert not r2["skip"] and r2["vocals"] is None  # a bridge without it is still a bridge
