@@ -1,6 +1,11 @@
 ---
 name: Bug report
 about: Something does not work as described
+title: ''
+labels: bug
+assignees: ''
+type: Bug
+
 ---
 
 **What happened, and what did you expect?**
