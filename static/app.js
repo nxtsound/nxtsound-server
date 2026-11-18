@@ -1271,11 +1271,25 @@ function djStemsCard(s) {
   const cache = s.cache_mb_limit
     ? tr('cache: {size} MB of {limit} MB', { size: fmtInt(Math.round(s.bytes / 1048576)), limit: fmtInt(s.cache_mb_limit) })
     : tr('cache: {size} (no limit)', { size: fmtBytes(s.bytes) });
-  return `<section class="acard"><h3>${esc(tr('DJ: vocal separation'))}</h3>
+  const spin = s.state === 'running'
+    ? SPIN.replace('class="ic spinner"', 'class="ic spinner" style="width:12px;height:12px;vertical-align:-2px;margin-right:5px"') : '';
+  return `<section class="acard" id="djStemsCard"><h3>${esc(tr('DJ: vocal separation'))}</h3>
     <div class="sub" style="padding:0 0 8px">${esc(tr('{done} of {total} songs separated ({pct}%)', { done: fmtInt(s.done), total: fmtInt(s.total), pct }))}</div>
     <div style="background:#333;border-radius:4px;height:8px;overflow:hidden;margin:0 0 8px"><div style="height:100%;background:var(--txt);width:${pct}%"></div></div>
-    <div class="sub" style="margin:0">${esc(stateText)} · ${esc(cache)}</div>
+    <div class="sub" style="margin:0">${spin}${esc(stateText)} · ${esc(cache)}</div>
     <p class="dim small hint" style="margin:10px 0 0">${esc(tr('With DJ_STEMS=1 the server separates the singing of each song once, in the background, while nothing is listening, instead of once per transition. A live DJ transition always comes first; this pauses for it and picks up again right after. DJ_STEMS_CACHE_MB caps the cache (0 = keep everything).'))}</p></section>`;
+}
+
+// Refreshes only the card above (not the whole System page) every 10s while there is still work going on.
+async function pollDjStems() {
+  const my = S.nav;
+  let dj;
+  try { dj = await api('/admin/dj-stems'); } catch (_) { return; }
+  if (my !== S.nav) return;
+  const el = document.getElementById('djStemsCard');
+  if (!el) return;  // left the System page
+  el.outerHTML = djStemsCard(dj);
+  if (dj.available && (dj.state === 'running' || dj.state === 'paused')) setTimeout(pollDjStems, 10000);
 }
 
 function streamsCard(st) {
@@ -1481,10 +1495,7 @@ async function adminSystem() {
   const [lib, en, lg, up, com, la, str, sec, dj] = await Promise.all([api('/admin/library'), api('/admin/enrich'), api('/admin/logging'), api('/admin/updates').catch(() => null), api('/admin/community'), api('/admin/login-alerts'), api('/admin/streams'), api('/admin/security'), api('/admin/dj-stems').catch(() => ({ available: false }))]);
   BK.data = await api('/admin/backups');
   if (BK.data.targets.some((t) => t.state.running)) bkWatch();
-  if (dj.available && (dj.state === 'running' || dj.state === 'paused')) {
-    const my = S.nav;
-    setTimeout(() => { if (my === S.nav) route(); }, 10000);  // still going: refresh the card without the user having to leave and come back
-  }
+  if (dj.available && (dj.state === 'running' || dj.state === 'paused')) setTimeout(pollDjStems, 10000);  // just the card, not the whole page
   const sc = lib.scan;
   const enState = !en.enabled ? tr('Off') : en.running ? tr('Looking up …')
     : en.finished ? tr('Last run {when}', { when: ago(en.finished) }) + (en.error ? ' (' + tr('aborted: {why}', { why: en.error }) + ')' : '') : tr('Waiting for the next scan');

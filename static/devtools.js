@@ -398,9 +398,14 @@
     return sessions.reverse().map((s) => s.reverse());
   }
 
+  // <details data-pb="..."> the admin opened by hand: kept open across the 5s refresh instead of collapsing again on every re-render.
+  // Devices (and sessions) start closed; only entries in here are forced open.
+  const playbackOpen = new Set();
+
   function playbackTab() {
     if (!playbackDiag.length) return '<p class="dim">No notes yet (needs a phone with Settings → Debug mode switched on).</p>';
     const time = (ts) => new Date(ts * 1000).toTimeString().slice(0, 8);
+    const openAttr = (key) => (playbackOpen.has(key) ? ' open' : '');
     const byUser = new Map();
     for (const e of playbackDiag) {
       if (!byUser.has(e.user_name)) byUser.set(e.user_name, new Map());
@@ -411,12 +416,14 @@
     }
     const html = [...byUser.entries()].map(([user, byDevice]) => {
       const deviceHtml = [...byDevice.entries()].map(([dev, entries]) => {
+        const devKey = `d\u0000${user}\u0000${dev}`;
         const sessionHtml = playbackSessions(entries).map((s) => {
           const span = s.length > 1 ? `${time(s[s.length - 1].ts)} – ${time(s[0].ts)}` : time(s[0].ts);
-          return `<details class="dcard"><summary>${esc(span)} (${s.length}, ${esc(s[0].platform)})</summary>
+          const sKey = `s\u0000${devKey}\u0000${s[0].ts}`;
+          return `<details class="dcard" data-pb="${esc(sKey)}"${openAttr(sKey)}><summary>${esc(span)} (${s.length}, ${esc(s[0].platform)})</summary>
             <table>${s.map(playbackRow).join('')}</table></details>`;
         }).join('');
-        return `<details open><summary>${esc(dev)} <span class="dim">(${entries.length})</span></summary>${sessionHtml}</details>`;
+        return `<details data-pb="${esc(devKey)}"${openAttr(devKey)}><summary>${esc(dev)} <span class="dim">(${entries.length})</span></summary>${sessionHtml}</details>`;
       }).join('');
       return `<details open class="dcard"><summary><b>${esc(user)}</b></summary>${deviceHtml}</details>`;
     }).join('');
@@ -473,6 +480,13 @@
       <div class="dfoot"><label>Dice <input data-dev-dice type="number" min="0" step="1" placeholder="free" aria-label="Fixed dice"></label>
       <span title="A fixed dice repeats radio and home mixes">fixed = repeatable</span><span style="flex:1"></span><a href="/api/dev/export" download>Snapshot ⬇</a></div>`;
     panel.addEventListener('click', (e) => {
+      const summary = e.target.closest('summary');
+      const pbDetails = summary && summary.parentElement.dataset.pb ? summary.parentElement : null;
+      if (pbDetails) {  // the click already toggled .open natively; just remember it for the next re-render
+        const key = pbDetails.dataset.pb;
+        if (pbDetails.open) playbackOpen.add(key); else playbackOpen.delete(key);
+        return;
+      }
       const b = e.target.closest('button');
       if (!b) return;
       if (b.dataset.close !== undefined) toggle(false);
