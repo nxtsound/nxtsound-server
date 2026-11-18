@@ -1041,11 +1041,13 @@ class PlaybackDiagBatch(BaseModel):
 
 
 @api.post("/diag/playback")
-def diag_playback(body: PlaybackDiagBatch, user: dict = Depends(current_user)):
+def diag_playback(body: PlaybackDiagBatch, request: Request, user: dict = Depends(current_user)):
     """A phone's own notes on a playback that got stuck (the app's debug mode), for finding lock-screen stalls later.
     Kept only while DEVTOOLS=1; otherwise accepted and dropped, so a server that does not use the tools does not collect this."""
     if devtools.ENABLED:
-        db.save_playback_diag(user["id"], [e.model_dump() for e in body.entries])
+        browser, system = devices.describe(request.headers.get("user-agent", ""))
+        device = f"{browser} on {system}" if browser and system else system or browser
+        db.save_playback_diag(user["id"], [e.model_dump() for e in body.entries], device)
     return {"ok": True}
 
 

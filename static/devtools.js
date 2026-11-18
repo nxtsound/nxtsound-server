@@ -377,16 +377,51 @@
     if (open && tab === 'playback') render();
   }
 
+  const SESSION_GAP_S = 300;  // a gap this long between two notes of the same device starts a new "session" (backgrounded, relaunched, ...)
+
+  function playbackRow(e) {
+    const cls = e.item_status === 'failed' || e.net_status === 'unsatisfied' ? 'bad' : e.retries > 0 ? 'slow' : '';
+    const detail = `want_play=${e.want_play} time_control=${esc(e.time_control)} item_status=${esc(e.item_status)}${e.item_error ? '\nerror: ' + esc(e.item_error) : ''}`;
+    return `<tr class="${cls}"><td class="dim">${esc(new Date(e.ts * 1000).toTimeString().slice(0, 8))}</td>
+      <td class="w"><details><summary>${esc(e.app_state)} · ${esc(e.net_status)}${e.net_expensive ? ' (expensive)' : ''}</summary><pre>${detail}</pre></details></td>
+      <td class="n">${fmt(e.t)} s</td><td class="n">${e.retries}×</td></tr>`;
+  }
+
+  // Notes of one user and device, newest first, split where a gap of SESSION_GAP_S or more suggests a fresh run of debug mode.
+  function playbackSessions(entries) {
+    const asc = [...entries].reverse();
+    const sessions = [];
+    for (const e of asc) {
+      const cur = sessions[sessions.length - 1];
+      if (cur && e.ts - cur[cur.length - 1].ts <= SESSION_GAP_S) cur.push(e); else sessions.push([e]);
+    }
+    return sessions.reverse().map((s) => s.reverse());
+  }
+
   function playbackTab() {
     if (!playbackDiag.length) return '<p class="dim">No notes yet (needs a phone with Settings → Debug mode switched on).</p>';
-    const rows = playbackDiag.map((e) => {
-      const cls = e.item_status === 'failed' || e.net_status === 'unsatisfied' ? 'bad' : e.retries > 0 ? 'slow' : '';
-      const detail = `want_play=${e.want_play} time_control=${esc(e.time_control)} item_status=${esc(e.item_status)}${e.item_error ? '\nerror: ' + esc(e.item_error) : ''}`;
-      return `<tr class="${cls}"><td class="dim">${esc(new Date(e.ts * 1000).toTimeString().slice(0, 8))}</td><td>${esc(e.user_name)}</td><td class="dim">${esc(e.platform)}</td>
-        <td class="w"><details><summary>${esc(e.app_state)} · ${esc(e.net_status)}${e.net_expensive ? ' (expensive)' : ''}</summary><pre>${detail}</pre></details></td>
-        <td class="n">${fmt(e.t)} s</td><td class="n">${e.retries}×</td></tr>`;
+    const time = (ts) => new Date(ts * 1000).toTimeString().slice(0, 8);
+    const byUser = new Map();
+    for (const e of playbackDiag) {
+      if (!byUser.has(e.user_name)) byUser.set(e.user_name, new Map());
+      const byDevice = byUser.get(e.user_name);
+      const dev = e.device || 'Unknown device';
+      if (!byDevice.has(dev)) byDevice.set(dev, []);
+      byDevice.get(dev).push(e);
+    }
+    const html = [...byUser.entries()].map(([user, byDevice]) => {
+      const deviceHtml = [...byDevice.entries()].map(([dev, entries]) => {
+        const sessionHtml = playbackSessions(entries).map((s) => {
+          const span = s.length > 1 ? `${time(s[s.length - 1].ts)} – ${time(s[0].ts)}` : time(s[0].ts);
+          return `<details class="dcard"><summary>${esc(span)} (${s.length}, ${esc(s[0].platform)})</summary>
+            <table>${s.map(playbackRow).join('')}</table></details>`;
+        }).join('');
+        return `<details open><summary>${esc(dev)} <span class="dim">(${entries.length})</span></summary>${sessionHtml}</details>`;
+      }).join('');
+      return `<details open class="dcard"><summary><b>${esc(user)}</b></summary>${deviceHtml}</details>`;
     }).join('');
-    return `<table>${rows}</table><p class="dim">Newest first, across every user with debug mode on. Open a row for the player's own state at that moment.</p>`;
+    return `${html}<p class="dim">Newest first. "Device" is the kind the phone reports (two of the same model look the same); a session is a run
+      of notes with no gap of ${Math.round(SESSION_GAP_S / 60)} minutes or more. Open a row for the player's own state at that moment.</p>`;
   }
 
   // ---------- Requests ----------
