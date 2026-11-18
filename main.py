@@ -53,6 +53,7 @@ import loginguard
 import pluginhost
 import plugins
 import library
+import playbackdiag
 import playerhub
 import pluginproto
 import streamguard
@@ -1051,6 +1052,22 @@ def diag_playback(body: PlaybackDiagBatch, request: Request, user: dict = Depend
     return {"ok": True}
 
 
+class PlaybackReportIn(BaseModel):
+    track_id: str = Field("", max_length=200)
+    reason: str = Field("", max_length=300)
+
+
+@api.post("/diag/report")
+def diag_report(body: PlaybackReportIn, request: Request, user: dict = Depends(current_user)):
+    """A listener's own "something is wrong right now" note (the player menu's "Report a playback problem"): marks the moment so the
+    matching debug-mode notes (see above) can be found on the admin area's Playback page. Kept only while DEVTOOLS=1, like those notes."""
+    if devtools.ENABLED:
+        browser, _system = devices.describe(request.headers.get("user-agent", ""))
+        platform = "ios" if browser.startswith("NxtSound") else "web"
+        db.save_playback_report(user["id"], int(time.time()), body.track_id, body.reason, platform)
+    return {"ok": True}
+
+
 # ---------- Server info (no login, used to link the app) ----------
 
 @app.get("/api/server-info")
@@ -1240,6 +1257,15 @@ def admin_dj_stems():
     if not stemcache.available():
         return {"available": False}
     return {"available": True, "cache_mb_limit": stemcache.MAX_BYTES // (1024 * 1024) if stemcache.MAX_BYTES > 0 else 0, **stemcache.status()}
+
+
+@admin.get("/playback")
+def admin_playback():
+    """The app's debug-mode notes, grouped by user/device/session with a quick verdict (see playbackdiag.py). Only while DEVTOOLS=1
+    (otherwise nothing is collected in the first place): {"available": false} then, so the page shows nothing rather than an empty table."""
+    if not devtools.ENABLED:
+        return {"available": False}
+    return {"available": True, "users": playbackdiag.group(db.playback_diag(5000), db.playback_reports(1000))}
 
 
 class PluginIn(BaseModel):
@@ -2320,12 +2346,6 @@ async def dev_analysis(track_id: str):
 def dev_plugin_calls():
     """The latest calls to plugins (all users' actions, like the access log): path, parameters, status, time, the start of the answer."""
     return {"calls": devtools.calls()}
-
-
-@dev_api.get("/playback-diag")
-def dev_playback_diag(limit: int = Query(300, ge=1, le=2000)):
-    """The phones' own notes from their debug mode (all users, newest first): for finding lock-screen stalls in a dead zone."""
-    return {"entries": db.playback_diag(limit)}
 
 
 @dev_api.get("/export")

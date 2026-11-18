@@ -190,6 +190,17 @@ Search is word-prefix based, ignores case and accents.
 
 **`stemcache.py`** (used when `stems.available()`): separating a few seconds for one transition is still the slowest part of making a bridge, and doing it again for every pair that shares a song is wasted work. This caches the singing of each song's own last and first `WINDOW` (40) seconds once — generous enough for any `mix_sec` this server can plan — instead of once per transition pair. A background thread (`start()`, hooked into `library.AFTER_SCAN`) works through `db.stem_cache_todo` while nothing is listening; `mark_live()` (called from `djmix.render` whenever a listener's own transition needs the model) makes it check before every song and wait rather than start one more — it cannot interrupt a separation already running, so the most a live request ever waits on it is whatever is already in flight. `read()` only hands back audio for a stretch it is sure the cache covers (checked against the stored window, not assumed); `djmix._separate` falls back to the model for anything else, exactly as if this cache did not exist. `DJ_STEMS_CACHE_MB` caps the cache (`0` = unlimited); `GET /api/admin/dj-stems` reports progress for the admin area.
 
+**App debug mode and `playbackdiag.py`**: Settings → Debug mode (off by default) sends technical playback state every few seconds (`POST
+/api/diag/playback`) and the player menu's "Report a playback problem" marks a moment by hand (`POST /api/diag/report`); both are kept
+only while `DEVTOOLS=1` (`db.save_playback_diag` / `db.save_playback_report`), so a server that does not use the tools never collects
+this. `GET /api/admin/playback` (admin area → *Playback*, itself only shown with `DEVTOOLS=1`) turns the flat log into something a human
+can scan: `playbackdiag.group` sorts by `ts` itself (a batch uploaded late, e.g. after a dead zone, must not be mistaken for the newest
+one just because it was inserted last), splits each device's notes into *sessions* (a gap of `SESSION_GAP` seconds or more means the app
+was backgrounded, relaunched, or debug mode was switched off and on), gives each a green/yellow/red verdict from its own retries and
+failures and a Wi-Fi/mobile-data label, and matches in any reports that fall near its start or end - by time and user only, not by
+device, since a report typed into the web page and the native notes about the same phone rarely share one device label (see `devices.py`
+and the caveat in its own docstring).
+
 **`bpm.py`**: decodes audio with ffmpeg, estimates tempo and beat grid with numpy, derives the Camelot key, intro end and outro start. Results are cached in the `bpm` table. `ANALYZE=1` queues new tracks after each scan, one at a time.
 
 **`enrich.py`**: rate-limited (one request per second) MusicBrainz and Cover Art Archive lookups. It only fills gaps and remembers misses (retried after 30 days).
@@ -256,7 +267,6 @@ Start the server with `DEVTOOLS=1` and sign in as an admin: a small **DEV** butt
 - **Analysis**: for the current song the curves the tempo analysis looks at (loudness, onsets) with the beats, bars, intro end, outro start and end drawn on top, and the stored values. A song that was never analyzed is analyzed when you open the tab.
 - **Home**: the seeds of *Your Mix* and *Because you listened to* with their scores, whether the similar songs came from the cache, and the time each widget took.
 - **Plugins**: the calls of the server to plugins (path, parameters, status, time, the start of the answer).
-- **Playback**: the phones' own notes from their debug mode (Settings → Debug mode in the app, off by default; see `save_playback_diag` in `db.py`), newest first, across every user: technical player state at the time, no titles. For finding why playback sometimes stalls on the lock screen.
 - **Requests**: the last calls to the API with status and duration, as the browser saw them.
 - **Dice** (footer): a number fixes the dice roll of the radio and of *Your Mix*, so the same request gives the same list. Empty = real dice.
 - **Snapshot** (footer): downloads the data recommendations are made from, with every name replaced, for a bug report. Load it into your own development instance with `DB_PATH=./dev/server.db python tools/load_snapshot.py nxtsound-snapshot.json --user dev --password …`: the songs have no audio, but radio, mixes and the home page give what the reporter saw. Look at the file before attaching it to a public issue: genres, years, durations and the times of plays are kept, the names are not.
