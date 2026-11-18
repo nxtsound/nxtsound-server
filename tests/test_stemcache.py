@@ -75,6 +75,7 @@ def fake_stems(monkeypatch):
     calls = []
     monkeypatch.setattr(stems, "available", lambda: True)
     monkeypatch.setattr(stems, "vocals", lambda x: (calls.append(len(x) / djmix.SR), (0.4 * x).astype(np.float32))[1])
+    monkeypatch.setattr(stemcache, "YIELD_AFTER_CHUNK", 0)  # do not slow the tests down with the real pause between chunks
     return calls
 
 
@@ -90,7 +91,8 @@ def test_precompute_caches_the_songs_own_start_and_end_and_read_slices_it_back(c
     assert row and row["ver"] == stemcache.CACHE_VER
     assert row["a_start"] == pytest.approx(dur - stemcache.WINDOW) and row["a_len"] == pytest.approx(stemcache.WINDOW)
     assert row["b_len"] == pytest.approx(stemcache.WINDOW) and row["bytes"] > 0
-    assert fake_stems == [pytest.approx(stemcache.WINDOW, abs=0.1)] * 2  # once for each side, not the whole song
+    # each side done in CHUNK-sized pieces (not the whole song, and not the whole 40 s window in one call to the model)
+    assert fake_stems == [pytest.approx(stemcache.CHUNK, abs=0.1)] * (2 * round(stemcache.WINDOW / stemcache.CHUNK))
 
     fake_stems.clear()
     out = stemcache.read(tid, path, "b", 1.0, 5.0, 1.0)  # fully inside the cached "b" (incoming) window
@@ -118,6 +120,24 @@ def test_precompute_yields_to_a_live_request_and_caches_nothing(tmp_path, monkey
     assert db.stem_cache_get("local:song") is None and not fake_stems  # it checked before doing any work, and stopped right there
 
 
+@needs_audio
+def test_a_live_request_partway_through_a_window_stops_it_after_the_current_chunk(tmp_path, monkeypatch, fake_stems):
+    """The point of chunking (see stemcache.py): a live render arriving mid-window gets the model within one CHUNK, not after the full WINDOW."""
+    monkeypatch.setattr(stemcache, "CACHE_DIR", tmp_path / "stem-cache")
+    path = tmp_path / "song.wav"
+    write_song(path, 120, seconds=70)
+    real_vocals = stems.vocals
+
+    def vocals_then_go_live(x):
+        if len(fake_stems) == 2:  # a live render "arrives" after the second chunk
+            stemcache.mark_live()
+        return real_vocals(x)
+    monkeypatch.setattr(stems, "vocals", vocals_then_go_live)
+    out = stemcache._separate_window(path, 0.0, stemcache.WINDOW)
+    assert out is None  # gave up partway, as soon as it noticed, instead of finishing all 4 chunks
+    assert len(fake_stems) == 3  # the chunk in flight when it noticed was allowed to finish; no more after that
+
+
 def test_live_activity_is_only_remembered_for_a_short_while(monkeypatch):
     monkeypatch.setattr(stemcache, "LIVE_GRACE", 0.05)
     assert not stemcache._live_recently()
@@ -137,7 +157,7 @@ def test_a_live_bridge_uses_the_precomputed_cache_instead_of_the_model(clicks, t
     for title, tid in ids.items():
         path = main.library.file_path(tid)
         stemcache._precompute(tid, path, 70.0)
-    assert len(fake_stems) == 4  # two sides, two songs - the only calls the model should ever see in this test
+    assert len(fake_stems) == 2 * 2 * round(stemcache.WINDOW / stemcache.CHUNK)  # two sides, two songs, chunked - the only calls to the model in this test
     fake_stems.clear()
 
     def boom(x):

@@ -1481,6 +1481,10 @@ async function adminSystem() {
   const [lib, en, lg, up, com, la, str, sec, dj] = await Promise.all([api('/admin/library'), api('/admin/enrich'), api('/admin/logging'), api('/admin/updates').catch(() => null), api('/admin/community'), api('/admin/login-alerts'), api('/admin/streams'), api('/admin/security'), api('/admin/dj-stems').catch(() => ({ available: false }))]);
   BK.data = await api('/admin/backups');
   if (BK.data.targets.some((t) => t.state.running)) bkWatch();
+  if (dj.available && (dj.state === 'running' || dj.state === 'paused')) {
+    const my = S.nav;
+    setTimeout(() => { if (my === S.nav) route(); }, 10000);  // still going: refresh the card without the user having to leave and come back
+  }
   const sc = lib.scan;
   const enState = !en.enabled ? tr('Off') : en.running ? tr('Looking up …')
     : en.finished ? tr('Last run {when}', { when: ago(en.finished) }) + (en.error ? ' (' + tr('aborted: {why}', { why: en.error }) + ')' : '') : tr('Waiting for the next scan');

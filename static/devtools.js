@@ -31,13 +31,13 @@
     #devPanel{position:fixed;z-index:60;right:0;top:0;bottom:0;width:min(440px,100vw);background:var(--card,#181818);border-left:1px solid #333;
       display:flex;flex-direction:column;font-size:13px;box-shadow:-8px 0 24px #0008}
     #devPanel[hidden]{display:none}
-    #devPanel header{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:10px 12px;border-bottom:1px solid #333}
+    #devPanel header{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:calc(10px + env(safe-area-inset-top)) 12px 10px;border-bottom:1px solid #333}
     #devPanel header b{flex:1;font:600 12px ui-monospace,Menlo,monospace;letter-spacing:.04em}
     #devPanel .dtab{padding:4px 10px;border-radius:12px;background:var(--card2,#262626);color:var(--dim)}
     #devPanel .dtab.on{background:#fff;color:#000}
     #devPanel .dtabs{display:flex;flex-wrap:wrap;gap:6px;width:100%}
     #devPanel .dbody{flex:1;overflow:auto;overflow-x:hidden;padding:8px 12px 24px;font-family:ui-monospace,Menlo,monospace;font-size:12px}
-    #devPanel .dfoot{display:flex;gap:8px;align-items:center;padding:8px 12px;border-top:1px solid #333;font-size:12px;color:var(--dim)}
+    #devPanel .dfoot{display:flex;gap:8px;align-items:center;padding:8px 12px calc(8px + env(safe-area-inset-bottom));border-top:1px solid #333;font-size:12px;color:var(--dim)}
     #devPanel .dfoot input{width:70px;background:var(--card2,#262626);color:inherit;border:1px solid #444;border-radius:6px;padding:3px 6px;font:inherit}
     #devPanel .dfoot a{color:#fff;text-decoration:underline}
     #devPanel table{width:100%;border-collapse:collapse;table-layout:auto}
