@@ -2,8 +2,8 @@
 
 Returns the BPM and the time of the first beat (seconds) for tracks with a steady tempo, plus the
 downbeat, key (Camelot), end of the intro, start of the outro and audible end. With the environment variable
-BEAT_ML=1 and `beat_this` installed (optional, needs PyTorch) beats and downbeats come from the model instead;
-on any error the built-in detection takes over.
+BEAT_ML=1 and `beat_this` installed (optional, needs PyTorch, shares the install with DJ_STEMS in stems.py: see docker-entrypoint.sh)
+beats and downbeats come from the model instead; on any error the built-in detection takes over.
 For tracks without a clear beat (live, rap with tempo changes, ambient) a low confidence is returned
 and the player uses a normal crossfade.
 """

@@ -673,7 +673,8 @@ def _similarity(seed, r, dj: dict, dice=random) -> dict:
         parts["dj"] = dj_affinity(dj[seed["id"]], dj[r["id"]]) * 0.8
     parts["artist"] = 3 if r["artist_id"] == seed["artist_id"] else 0
     parts["album"] = 2 if seed["album_id"] and r["album_id"] == seed["album_id"] else 0
-    parts["genre"] = 2 if seed["genre"] and r["genre"] == seed["genre"] else 0
+    # both tagged, neither matching, no shared artist to excuse it: a different genre entirely, so it should rank worse, not merely neutral
+    parts["genre"] = 2 if seed["genre"] and r["genre"] == seed["genre"] else (-2 if seed["genre"] and r["genre"] and r["artist_id"] != seed["artist_id"] else 0)
     try:
         parts["year"] = max(0, 1.5 - abs(int(r["year"]) - int(seed["year"])) / 5)
     except ValueError:

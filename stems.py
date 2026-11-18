@@ -1,8 +1,10 @@
 """Optional: the vocals of a piece of music as a track of their own (DJ transitions that leave the singing alone, see djmix.py).
 
-Off unless DJ_STEMS=1 and PyTorch and `demucs` are installed (they are large: see Dockerfile.stems). The model (htdemucs) is loaded when it is first needed and
-let go of again after a few minutes without use. A piece of 40 seconds takes about 8 s on a fast laptop and one to two minutes on a small server; the results
-are part of the bridge files, which are kept, so a pair of songs is separated once.
+Off unless DJ_STEMS=1 and PyTorch and `demucs` are installed. They are large (PyTorch about 0.7 GB, shared with BEAT_ML in bpm.py if that is also on) and not
+part of the image: the entrypoint installs them into the data volume on the first start with DJ_STEMS=1 or BEAT_ML=1 (see docker-entrypoint.sh), so a server
+that leaves both off never pays for them, and turning both back off removes the install again. The model (htdemucs) is loaded
+when it is first needed and let go of again after a few minutes without use. A piece of 40 seconds takes about 8 s on a fast laptop and one to two minutes on
+a small server; the results are part of the bridge files, which are kept, so a pair of songs is separated once.
 """
 import importlib.util
 import logging

@@ -2,7 +2,8 @@
 // Developer tools. Loaded by app.js only on a server started with DEVTOOLS=1, and only for admins (the server decides what it hands out).
 // English only on purpose: the audience is people working on the code. Nothing here changes how the player or the server behave.
 // Tabs: Queue (why a song is in the radio), DJ (the plan of every transition), Analysis (what the tempo analysis saw), Home (seeds, cache,
-// timings), Plugins (calls to plugins), Requests (calls to the API). A fixed dice repeats radio and mixes; Snapshot saves the data they are made from.
+// timings), Plugins (calls to plugins), Playback (phones' notes from their debug mode), Requests (calls to the API).
+// A fixed dice repeats radio and mixes; Snapshot saves the data they are made from.
 
 (() => {
   const MAX_LOG = 60;
@@ -14,12 +15,13 @@
   };
   // How a transition is judged (milliseconds between the beats of the two songs, and so on). Measured, not heard: see the developer guide.
   const PHASE_WARN_MS = 40, PHASE_BAD_MS = 80, LAG_WARN_MS = 400, REACT_S = 15;
-  const TABS = [['queue', 'Queue'], ['dj', 'DJ'], ['analysis', 'Analysis'], ['home', 'Home'], ['plugins', 'Plugins'], ['requests', 'Requests']];
+  const TABS = [['queue', 'Queue'], ['dj', 'DJ'], ['analysis', 'Analysis'], ['home', 'Home'], ['plugins', 'Plugins'], ['playback', 'Playback'], ['requests', 'Requests']];
   const log = [];
   const djLog = [];
   let homeDev = null;
   let analysis = null;       // {id, title, data|error}
   let pluginCalls = [];
+  let playbackDiag = [];
   let open = false;
   let tab = 'queue';
 
@@ -74,7 +76,7 @@
     if (d.kind === 'similar') {
       const rows = Object.keys(PART_MAX).map((k) => {
         const v = d.parts[k];
-        const w = v ? Math.round((100 * v) / PART_MAX[k]) : 0;
+        const w = v ? Math.max(0, Math.round((100 * v) / PART_MAX[k])) : 0;  // a penalty (e.g. genre mismatch) is negative: no bar, the number still shows
         return `<tr><td>${esc(k)}</td><td><span class="bar" style="width:${w}px"></span></td><td class="n">${fmt(v)}</td><td class="dim">${esc(PART_NOTE[k])}</td></tr>`;
       }).join('');
       const margin = d.cutoff === null ? 'every candidate fit into the list' : `${fmt(d.score - d.cutoff)} points above the first song that did not make it (${fmt(d.cutoff)})`;
@@ -368,6 +370,25 @@
     return `<table>${rows}</table><p class="dim">All calls of the server to plugins, whoever caused them. Bodies are never kept, answers to settings calls are left out.</p>`;
   }
 
+  // ---------- Playback (the app's debug mode: lock-screen stalls) ----------
+
+  async function loadPlaybackDiag() {
+    try { playbackDiag = (await api('/dev/playback-diag')).entries; } catch (_) { /* later */ }
+    if (open && tab === 'playback') render();
+  }
+
+  function playbackTab() {
+    if (!playbackDiag.length) return '<p class="dim">No notes yet (needs a phone with Settings → Debug mode switched on).</p>';
+    const rows = playbackDiag.map((e) => {
+      const cls = e.item_status === 'failed' || e.net_status === 'unsatisfied' ? 'bad' : e.retries > 0 ? 'slow' : '';
+      const detail = `want_play=${e.want_play} time_control=${esc(e.time_control)} item_status=${esc(e.item_status)}${e.item_error ? '\nerror: ' + esc(e.item_error) : ''}`;
+      return `<tr class="${cls}"><td class="dim">${esc(new Date(e.ts * 1000).toTimeString().slice(0, 8))}</td><td>${esc(e.user_name)}</td><td class="dim">${esc(e.platform)}</td>
+        <td class="w"><details><summary>${esc(e.app_state)} · ${esc(e.net_status)}${e.net_expensive ? ' (expensive)' : ''}</summary><pre>${detail}</pre></details></td>
+        <td class="n">${fmt(e.t)} s</td><td class="n">${e.retries}×</td></tr>`;
+    }).join('');
+    return `<table>${rows}</table><p class="dim">Newest first, across every user with debug mode on. Open a row for the player's own state at that moment.</p>`;
+  }
+
   // ---------- Requests ----------
 
   function requestsTab() {
@@ -387,7 +408,7 @@
     p.querySelectorAll('.dtab[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
     const body = p.querySelector('.dbody');
     const top = body.scrollTop;
-    body.innerHTML = { queue: queueTab, dj: djTab, analysis: analysisTab, home: homeTab, plugins: pluginsTab, requests: requestsTab }[tab]();
+    body.innerHTML = { queue: queueTab, dj: djTab, analysis: analysisTab, home: homeTab, plugins: pluginsTab, playback: playbackTab, requests: requestsTab }[tab]();
     body.scrollTop = top;
     const dice = p.querySelector('[data-dev-dice]');
     if (document.activeElement !== dice) dice.value = S.devRng === undefined ? '' : S.devRng;
@@ -403,6 +424,7 @@
     open = force === undefined ? !open : force;
     document.getElementById('devPanel').hidden = !open;
     if (open && tab === 'plugins') loadPluginCalls();
+    if (open && tab === 'playback') loadPlaybackDiag();
     render();
   }
 
@@ -422,6 +444,7 @@
       else if (b.dataset.tab) {
         tab = b.dataset.tab;
         if (tab === 'plugins') loadPluginCalls();
+        if (tab === 'playback') loadPlaybackDiag();
         if (tab === 'analysis') loadAnalysis();
         render();
       } else if (b.dataset.devRetry !== undefined) { analysis = null; loadAnalysis(); }
@@ -449,6 +472,7 @@
     // things that change while the panel is open: look again now and then (cheap, only while it is open)
     setInterval(() => { if (open && (tab === 'queue' || (tab === 'analysis' && currentTrack() && (!analysis || analysis.id !== currentTrack().id)))) render(); }, 1500);
     setInterval(() => { if (open && tab === 'plugins') loadPluginCalls(); }, 3000);
+    setInterval(() => { if (open && tab === 'playback') loadPlaybackDiag(); }, 5000);
     setInterval(watchDj, 400);  // the plan of a transition is made by the player, here it is only watched
     setInterval(sampleMix, 100);  // finer while a transition runs: the beats of the two songs
     [elA, elB].forEach((el) => el.addEventListener('waiting', () => {  // only the element that is heard counts, and not while it is being moved

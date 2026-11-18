@@ -272,3 +272,25 @@ def test_export_route_is_for_developer_admins(alice, lib, monkeypatch):
     r = alice.get("/api/dev/export")
     assert r.status_code == 200 and "attachment" in r.headers["content-disposition"] and r.json()["server_version"]
     assert make_client("Bob").get("/api/dev/export").status_code == 404
+
+
+def _diag_entry(**over):
+    e = {"ts": 1700000000, "track_id": "local:x", "t": 12.5, "want_play": True, "time_control": "waiting", "item_status": "unknown",
+         "item_error": "", "retries": 2, "net_status": "unsatisfied", "net_expensive": False, "app_state": "background", "platform": "ios"}
+    e.update(over)
+    return e
+
+
+def test_playback_diag_is_only_kept_with_devtools_on(alice, lib, monkeypatch):
+    bob = make_client("Bob")
+    assert bob.post("/api/diag/playback", json={"entries": [_diag_entry()]}).json() == {"ok": True}
+    assert "playback_diag" not in alice.get("/api/server-info").json()["functions"]
+    assert alice.get("/api/dev/playback-diag").status_code == 404
+    assert main.db.playback_diag() == []  # DEVTOOLS is off: nothing was stored
+
+    monkeypatch.setattr(devtools, "ENABLED", True)
+    assert "playback_diag" in alice.get("/api/server-info").json()["functions"]
+    bob.post("/api/diag/playback", json={"entries": [_diag_entry(track_id="local:y", retries=5)]})
+    entries = alice.get("/api/dev/playback-diag").json()["entries"]
+    assert len(entries) == 1 and entries[0]["track_id"] == "local:y" and entries[0]["retries"] == 5 and entries[0]["user_name"] == "Bob"
+    assert make_client("Bob").get("/api/dev/playback-diag").status_code == 404  # Bob is no admin

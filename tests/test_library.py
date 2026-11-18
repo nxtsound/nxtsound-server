@@ -118,6 +118,15 @@ def test_radio_fills_up_small_libraries_with_random_tracks(alice, lib):
     assert len(tracks) == 5 and ids["Epsilon"] not in {t["id"] for t in tracks}  # the library has 6 tracks
 
 
+def test_similarity_marks_down_a_different_genre_by_an_unrelated_artist():
+    seed = {"id": "s", "artist_id": "a1", "album_id": "", "genre": "HipHop/Rap", "year": "2020"}
+    other_genre = {"id": "r1", "artist_id": "a2", "album_id": "", "genre": "Pop/Rock", "year": "2020"}
+    same_artist_other_genre = {"id": "r2", "artist_id": "a1", "album_id": "", "genre": "Pop/Rock", "year": "2020"}
+    parts = main.library._similarity(seed, other_genre, {}, dice=main.library.random)
+    assert parts["genre"] < 0  # a different artist in a different genre should not slip into the radio by chance
+    assert main.library._similarity(seed, same_artist_other_genre, {}, dice=main.library.random)["genre"] == 0  # a tagging slip on the same artist is not punished
+
+
 def test_admin_library_stats_and_rescan(alice, bob, lib):
     s = alice.get("/api/admin/library").json()
     assert s["tracks"] == 6 and s["artists"] == 3 and s["albums"] == 4 and s["scan"]["running"] is False

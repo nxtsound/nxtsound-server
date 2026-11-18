@@ -219,6 +219,33 @@ CREATE TABLE IF NOT EXISTS dislikes(
   ts INTEGER NOT NULL,
   PRIMARY KEY(user_id, kind, ref)
 );
+CREATE TABLE IF NOT EXISTS playback_diag(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  ts INTEGER NOT NULL,
+  track_id TEXT NOT NULL DEFAULT '',
+  t REAL NOT NULL DEFAULT 0,
+  want_play INTEGER NOT NULL DEFAULT 0,
+  time_control TEXT NOT NULL DEFAULT '',
+  item_status TEXT NOT NULL DEFAULT '',
+  item_error TEXT NOT NULL DEFAULT '',
+  retries INTEGER NOT NULL DEFAULT 0,
+  net_status TEXT NOT NULL DEFAULT '',
+  net_expensive INTEGER NOT NULL DEFAULT 0,
+  app_state TEXT NOT NULL DEFAULT '',
+  platform TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_playback_diag_id ON playback_diag(id DESC);
+CREATE TABLE IF NOT EXISTS stem_cache(
+  video_id TEXT PRIMARY KEY REFERENCES lib_tracks(id) ON DELETE CASCADE,
+  ver INTEGER NOT NULL,
+  a_start REAL NOT NULL,
+  a_len REAL NOT NULL,
+  b_len REAL NOT NULL,
+  bytes INTEGER NOT NULL DEFAULT 0,
+  cached_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_stem_cache_cached_at ON stem_cache(cached_at);
 """
 
 
@@ -1417,6 +1444,104 @@ def delete_login_blocks(key: str | None = None) -> int:
         if key is None:
             return c.execute("DELETE FROM login_blocks").rowcount
         return c.execute("DELETE FROM login_blocks WHERE key = ?", (key,)).rowcount
+
+
+# ---------- Playback diagnostics (the app's debug mode: lock-screen stalls in a dead zone) ----------
+
+MAX_PLAYBACK_DIAG = 5000  # a running log across all users, not a per-user archive: oldest snapshots are dropped first
+
+
+def save_playback_diag(user_id: int, entries: list[dict]) -> None:
+    if not entries:
+        return
+    with db() as c:
+        c.executemany(
+            "INSERT INTO playback_diag(user_id, ts, track_id, t, want_play, time_control, item_status, item_error, retries, net_status, "
+            "net_expensive, app_state, platform) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [(user_id, e["ts"], e["track_id"][:200], e["t"], 1 if e["want_play"] else 0, e["time_control"][:40], e["item_status"][:40],
+              e["item_error"][:300], e["retries"], e["net_status"][:40], 1 if e["net_expensive"] else 0, e["app_state"][:20], e["platform"][:20])
+             for e in entries],
+        )
+        n = c.execute("SELECT COUNT(*) FROM playback_diag").fetchone()[0]
+        if n > MAX_PLAYBACK_DIAG:
+            c.execute("DELETE FROM playback_diag WHERE id NOT IN (SELECT id FROM playback_diag ORDER BY id DESC LIMIT ?)", (MAX_PLAYBACK_DIAG,))
+
+
+def playback_diag(limit: int = 300) -> list[dict]:
+    """The newest snapshots first (see `save_playback_diag`): for the devtools panel that looks for lock-screen stalls."""
+    with db() as c:
+        rows = c.execute(
+            "SELECT p.*, u.name AS user_name FROM playback_diag p JOIN users u ON u.id = p.user_id ORDER BY p.id DESC LIMIT ?", (limit,)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ---------- Stem cache (DJ_STEMS: the vocals of a song's own intro and outro, separated once per song) ----------
+
+def stem_cache_get(video_id: str) -> dict | None:
+    with db() as c:
+        r = c.execute("SELECT * FROM stem_cache WHERE video_id = ?", (video_id,)).fetchone()
+    return dict(r) if r else None
+
+
+def stem_cache_set(video_id: str, ver: int, a_start: float, a_len: float, b_len: float, size: int) -> None:
+    with db() as c:
+        c.execute(
+            "INSERT INTO stem_cache(video_id, ver, a_start, a_len, b_len, bytes, cached_at) VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(video_id) DO UPDATE SET ver = excluded.ver, a_start = excluded.a_start, a_len = excluded.a_len, "
+            "b_len = excluded.b_len, bytes = excluded.bytes, cached_at = excluded.cached_at",
+            (video_id, ver, a_start, a_len, b_len, size, _now()),
+        )
+
+
+def stem_cache_touch(video_id: str) -> None:
+    """Bumps `cached_at` (the cache was used): kept longest when the cache has to shrink."""
+    with db() as c:
+        c.execute("UPDATE stem_cache SET cached_at = ? WHERE video_id = ?", (_now(), video_id))
+
+
+def stem_cache_delete(video_id: str) -> None:
+    with db() as c:
+        c.execute("DELETE FROM stem_cache WHERE video_id = ?", (video_id,))
+
+
+def stem_cache_stats(min_conf: float) -> dict:
+    """total: local tracks with a confident enough tempo to ever be a transition partner. done: of those, already cached. bytes: cache size."""
+    with db() as c:
+        total = c.execute(
+            "SELECT COUNT(*) FROM lib_tracks t JOIN bpm b ON b.video_id = t.id WHERE b.conf >= ? AND b.bpm > 0", (min_conf,)
+        ).fetchone()[0]
+        done, size = c.execute("SELECT COUNT(*), COALESCE(SUM(bytes), 0) FROM stem_cache").fetchone()
+    return {"total": total, "done": done, "bytes": size}
+
+
+def stem_cache_todo(min_conf: float, ver: int, limit: int = 2000) -> list[dict]:
+    """Local tracks that could use the cache but do not have a current one yet, newest added first."""
+    with db() as c:
+        rows = c.execute(
+            "SELECT t.id, t.duration FROM lib_tracks t JOIN bpm b ON b.video_id = t.id LEFT JOIN stem_cache s ON s.video_id = t.id "
+            "WHERE b.conf >= ? AND b.bpm > 0 AND (s.video_id IS NULL OR s.ver < ?) ORDER BY t.added DESC LIMIT ?",
+            (min_conf, ver, limit),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def stem_cache_evict(max_bytes: int) -> list[str]:
+    """Drops the least recently used cached tracks until the total is back under the limit (0 = unlimited: nothing is dropped).
+    -> the video_ids dropped, so the caller can also remove their files."""
+    if max_bytes <= 0:
+        return []
+    dropped = []
+    with db() as c:
+        rows = c.execute("SELECT video_id, bytes FROM stem_cache ORDER BY cached_at").fetchall()
+        total = sum(r["bytes"] for r in rows)
+        for r in rows:
+            if total <= max_bytes:
+                break
+            c.execute("DELETE FROM stem_cache WHERE video_id = ?", (r["video_id"],))
+            total -= r["bytes"]
+            dropped.append(r["video_id"])
+    return dropped
 
 
 def add_stream_stat(mode: str, ms: int) -> None:

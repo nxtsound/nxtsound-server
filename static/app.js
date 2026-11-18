@@ -1261,6 +1261,23 @@ function pluginActionSheet(id, pluginName, action) {
 }
 
 // Playing at the same time: how many devices of one account may play at once.
+// DJ_STEMS: progress of the per-song background separation (see stemcache.py). Not shown at all with DJ_STEMS off.
+function djStemsCard(s) {
+  if (!s.available) return '';
+  const pct = s.total ? Math.min(100, Math.round((100 * s.done) / s.total)) : 100;
+  const stateText = {
+    running: tr('Separating …'), paused: tr('Paused: a live transition comes first'), done: tr('Caught up'), idle: tr('Idle'),
+  }[s.state] || s.state;
+  const cache = s.cache_mb_limit
+    ? tr('cache: {size} MB of {limit} MB', { size: fmtInt(Math.round(s.bytes / 1048576)), limit: fmtInt(s.cache_mb_limit) })
+    : tr('cache: {size} (no limit)', { size: fmtBytes(s.bytes) });
+  return `<section class="acard"><h3>${esc(tr('DJ: vocal separation'))}</h3>
+    <div class="sub" style="padding:0 0 8px">${esc(tr('{done} of {total} songs separated ({pct}%)', { done: fmtInt(s.done), total: fmtInt(s.total), pct }))}</div>
+    <div style="background:#333;border-radius:4px;height:8px;overflow:hidden;margin:0 0 8px"><div style="height:100%;background:var(--txt);width:${pct}%"></div></div>
+    <div class="sub" style="margin:0">${esc(stateText)} · ${esc(cache)}</div>
+    <p class="dim small hint" style="margin:10px 0 0">${esc(tr('With DJ_STEMS=1 the server separates the singing of each song once, in the background, while nothing is listening, instead of once per transition. A live DJ transition always comes first; this pauses for it and picks up again right after. DJ_STEMS_CACHE_MB caps the cache (0 = keep everything).'))}</p></section>`;
+}
+
 function streamsCard(st) {
   const rows = st.playing.map((p) => `<div class="logrow"><span>${esc(p.user)}</span><span class="dim">${esc(trn(p.streams, '{n} stream', '{n} streams'))}</span></div>`).join('');
   return `<section class="acard"><h3>${esc(tr('Playing at the same time'))}</h3>
@@ -1461,7 +1478,7 @@ $('#sheet .panel').addEventListener('click', async (e) => {
 });
 
 async function adminSystem() {
-  const [lib, en, lg, up, com, la, str, sec] = await Promise.all([api('/admin/library'), api('/admin/enrich'), api('/admin/logging'), api('/admin/updates').catch(() => null), api('/admin/community'), api('/admin/login-alerts'), api('/admin/streams'), api('/admin/security')]);
+  const [lib, en, lg, up, com, la, str, sec, dj] = await Promise.all([api('/admin/library'), api('/admin/enrich'), api('/admin/logging'), api('/admin/updates').catch(() => null), api('/admin/community'), api('/admin/login-alerts'), api('/admin/streams'), api('/admin/security'), api('/admin/dj-stems').catch(() => ({ available: false }))]);
   BK.data = await api('/admin/backups');
   if (BK.data.targets.some((t) => t.state.running)) bkWatch();
   const sc = lib.scan;
@@ -1474,6 +1491,7 @@ async function adminSystem() {
     <div class="sub" style="padding:0">${state}</div>
     <div class="actions" style="margin:12px 0 0"><button class="btn sec" data-act="scanLibrary"${sc.running ? ' disabled' : ''}>${esc(tr('Scan now'))}</button><button class="btn sec" data-act="scanLibrary" data-full="1"${sc.running ? ' disabled' : ''}>${esc(tr('Re-read everything'))}</button></div>
     <p class="dim small hint" style="margin:10px 0 0">${esc(tr('New and changed files are detected at startup and after every scan. “Re-read everything” also re-reads unchanged files (e.g. after re-tagging covers).'))}</p></section>
+    ${djStemsCard(dj)}
     <section class="acard"><h3>${esc(tr('Information from the internet'))}</h3>
     <div class="sub" style="padding:0 0 8px">${esc(enState)} · ${esc(tr('found: {a} artists, {b} albums', { a: fmtInt(en.artists_found), b: fmtInt(en.albums_found) }))} · ${esc(tr('without match: {n}', { n: fmtInt(en.artists_missed + en.albums_missed) }))}</div>
     <div class="actions" style="margin:0"><button class="btn sec" data-act="enrichToggle" data-on="${en.enabled ? '' : '1'}">${esc(en.enabled ? tr('Turn off') : tr('Turn on'))}</button><button class="btn sec" data-act="enrichRun"${en.enabled && !en.running ? '' : ' disabled'}>${esc(tr('Look up now'))}</button></div>
@@ -3789,7 +3807,10 @@ function djHandTick(p) {
     if (performance.now() - h.t0 > 6000 || el.error) { djBridgeFail(p); return; }
     if (el.paused || el.seeking || el.readyState < 3) return;
     const drift = h.want() - el.currentTime;
-    if (Math.abs(drift) > 0.015 && h.tries < 3) { h.tries++; el.currentTime = Math.max(0, el.currentTime + drift + 0.03 * h.rate); return; }
+    if (Math.abs(drift) > 0.015) {
+      if (h.tries >= 20) { djBridgeFail(p); return; }  // still off after ~0.8s of trying: a bad fade (bass clash) is worse than no bridge here
+      h.tries++; el.currentTime = Math.max(0, el.currentTime + drift + 0.03 * h.rate); return;
+    }
     h.phase = 'fade'; h.fadeAt = performance.now();
     djFade(nodeOf(h.out), nodeOf(h.in), h.xf);
     h.onStart();

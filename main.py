@@ -43,6 +43,7 @@ import devsnapshot
 import devtools
 import djmix
 import stems
+import stemcache
 import enrich
 import homewidgets
 import i18n
@@ -1020,6 +1021,34 @@ def start_stat(body: StartStat, user: dict = Depends(current_user)):
     return {"ok": True}
 
 
+class PlaybackDiagEntry(BaseModel):
+    ts: int = Field(ge=0)
+    track_id: str = ""
+    t: float = 0
+    want_play: bool = False
+    time_control: str = ""
+    item_status: str = ""
+    item_error: str = ""
+    retries: int = Field(0, ge=0)
+    net_status: str = ""
+    net_expensive: bool = False
+    app_state: str = ""
+    platform: str = "ios"
+
+
+class PlaybackDiagBatch(BaseModel):
+    entries: list[PlaybackDiagEntry] = Field(max_length=50)
+
+
+@api.post("/diag/playback")
+def diag_playback(body: PlaybackDiagBatch, user: dict = Depends(current_user)):
+    """A phone's own notes on a playback that got stuck (the app's debug mode), for finding lock-screen stalls later.
+    Kept only while DEVTOOLS=1; otherwise accepted and dropped, so a server that does not use the tools does not collect this."""
+    if devtools.ENABLED:
+        db.save_playback_diag(user["id"], [e.model_dump() for e in body.entries])
+    return {"ok": True}
+
+
 # ---------- Server info (no login, used to link the app) ----------
 
 @app.get("/api/server-info")
@@ -1029,7 +1058,7 @@ def server_info():
         "name": APP_NAME,
         "version": VERSION_INFO["version"],
         "api_version": API_VERSION,
-        "functions": ["library", "search", "playlists", "likes", "history", "recommendations", "dj_analysis", "lyrics", "plugins"] + (["dj_bridge"] if djmix.available() else []) + (["dj_stems"] if djmix.available() and stems.available() else []),
+        "functions": ["library", "search", "playlists", "likes", "history", "recommendations", "dj_analysis", "lyrics", "plugins"] + (["dj_bridge"] if djmix.available() else []) + (["dj_stems"] if djmix.available() and stems.available() else []) + (["playback_diag"] if devtools.ENABLED else []),
         "login_methods": ["password"],
         "setup_required": db.count_users() == 0,
     }
@@ -1201,6 +1230,14 @@ def admin_library():
 def admin_library_scan(full: bool = False):
     library.start_scan(full)
     return library.stats()
+
+
+@admin.get("/dj-stems")
+def admin_dj_stems():
+    """How far the background separation of the library has got (see stemcache.py): off, or {state, total, done, bytes, current}."""
+    if not stemcache.available():
+        return {"available": False}
+    return {"available": True, "cache_mb_limit": stemcache.MAX_BYTES // (1024 * 1024) if stemcache.MAX_BYTES > 0 else 0, **stemcache.status()}
 
 
 class PluginIn(BaseModel):
@@ -1831,6 +1868,15 @@ def _analyze_missing_bg() -> None:
 library.AFTER_SCAN.append(_analyze_missing_bg)
 
 
+def _stemcache_bg() -> None:
+    """Starts the stem cache's background worker (see stemcache.py); a no-op while DJ_STEMS is off or it is already running."""
+    if stemcache.available():
+        stemcache.start()
+
+
+library.AFTER_SCAN.append(_stemcache_bg)
+
+
 # ---------- Lyrics (LRCLIB) ----------
 
 LYRICS_ENABLED = os.environ.get("LYRICS", "1") != "0"
@@ -2272,6 +2318,12 @@ async def dev_analysis(track_id: str):
 def dev_plugin_calls():
     """The latest calls to plugins (all users' actions, like the access log): path, parameters, status, time, the start of the answer."""
     return {"calls": devtools.calls()}
+
+
+@dev_api.get("/playback-diag")
+def dev_playback_diag(limit: int = Query(300, ge=1, le=2000)):
+    """The phones' own notes from their debug mode (all users, newest first): for finding lock-screen stalls in a dead zone."""
+    return {"entries": db.playback_diag(limit)}
 
 
 @dev_api.get("/export")

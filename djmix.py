@@ -25,6 +25,7 @@ from pathlib import Path
 import bpm as bpmlib
 import db
 import stems
+import stemcache
 
 try:
     import numpy as np
@@ -489,16 +490,25 @@ def _encode(pcm, dest: Path) -> None:
     os.replace(tmp, dest)
 
 
-def _separate(x, lo: float, hi: float):
-    """The singing of `x` between the seconds `lo` and `hi`, silence elsewhere (the model needs time to run: the less it is given, the better)."""
+def _separate(x, lo: float, hi: float, track_id: str = "", path: Path | None = None, side: str = "", source_start: float = 0.0, rate: float = 1.0):
+    """The singing of `x` between the seconds `lo` and `hi`, silence elsewhere (the model needs time to run: the less it is given, the better).
+    `track_id`/`path`/`side` (`"a"` or `"b"`)/`source_start`/`rate`: where this stretch is in the song's own file, so a cache made once per
+    song (see stemcache.py) can be used instead of running the model again; without a cache for it, this still works exactly as before."""
     out = np.zeros_like(x)
     i0, i1 = max(0, int(lo * SR)), min(len(x), int(hi * SR))
-    if i1 > i0:
-        out[i0:i1] = stems.vocals(x[i0:i1])
+    if i1 <= i0:
+        return out
+    if track_id and path is not None:
+        cached = stemcache.read(track_id, path, side, source_start, (i1 - i0) / SR * rate, rate)
+        if cached is not None and len(cached) > 0:
+            k = min(len(cached), i1 - i0)  # ffmpeg rarely hits the exact sample count asked for, like any other decode here
+            out[i0:i0 + k] = cached[:k]
+            return out
+    out[i0:i1] = stems.vocals(x[i0:i1])
     return out
 
 
-def render(a_path: Path, b_path: Path, p: dict, dest: Path) -> dict:
+def render(a_path: Path, b_path: Path, p: dict, dest: Path, a_id: str = "", b_id: str = "") -> dict:
     """Makes the bridge file for a plan. -> {"align_ms", "align_strength", "b_resume", "duration"}."""
     shift, strength = _measure_offset(a_path, b_path, p) if p["lock"] else (0.0, 0.0)  # beats of songs with different tempi do not line up: nothing to correct
     mix, rate = p["mix_sec"], p["rate"]
@@ -506,10 +516,12 @@ def render(a_path: Path, b_path: Path, p: dict, dest: Path) -> dict:
     b = _decode(b_path, p["x"], (mix + TAIL + 1.0) * rate, rate)  # stretched: (mix + TAIL + 1) seconds long
     vocals, report = None, {}
     if stems.available():
+        stemcache.mark_live()  # a per-song cache (see stemcache.py) may be used instead below, but tells it either way: a listener is waiting right now
         try:
             # only what is heard of the singing: A from a second before the transition to its end, B until a few seconds after the transition
             # (the rest of both is the song as it is: where there is no separated singing, the music is the whole signal and nothing changes)
-            vocals = (_separate(a, LEAD - 1.3, LEAD + mix + 0.5), _separate(b, 0.0, mix + 5.0))
+            vocals = (_separate(a, LEAD - 1.3, LEAD + mix + 0.5, a_id, a_path, "a", p["a_start"] + LEAD - 1.3),
+                      _separate(b, 0.0, mix + 5.0, b_id, b_path, "b", p["x"], rate))
         except Exception as e:  # no model, no memory: a bridge without it is still a bridge
             log.warning("stems: not used for this bridge: %s", e)
     pcm = mix_pieces(a, b, {**p, "level": True}, -shift, vocals, report)  # B's beats fall `shift` s late: it has to start that much earlier
@@ -578,7 +590,7 @@ def make(a_id: str, b_id: str, a_path: Path, b_path: Path, a_info: dict, b_info:
             pass
     with _render_lock:
         if not (dest.is_file() and meta.is_file()):
-            found = render(a_path, b_path, p, dest)
+            found = render(a_path, b_path, p, dest, a_id, b_id)
             meta.write_text(json.dumps(found), encoding="utf-8")
             _prune()
         else:
