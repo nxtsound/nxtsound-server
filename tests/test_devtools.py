@@ -290,7 +290,9 @@ def test_playback_diag_is_only_kept_with_devtools_on(alice, lib, monkeypatch):
 
     monkeypatch.setattr(devtools, "ENABLED", True)
     assert "playback_diag" in alice.get("/api/server-info").json()["functions"]
-    bob.post("/api/diag/playback", json={"entries": [_diag_entry(track_id="local:y", retries=5)]})
+    bob.post("/api/diag/playback", json={"entries": [_diag_entry(track_id="local:y", retries=5)]},
+             headers={"User-Agent": "NxtSound-iOS/1 (iPhone; iOS 18.1)"})
     entries = alice.get("/api/dev/playback-diag").json()["entries"]
     assert len(entries) == 1 and entries[0]["track_id"] == "local:y" and entries[0]["retries"] == 5 and entries[0]["user_name"] == "Bob"
+    assert entries[0]["device"] == "NxtSound-iOS on iPhone"  # grouped by this in the devtools panel (user -> device -> sessions)
     assert make_client("Bob").get("/api/dev/playback-diag").status_code == 404  # Bob is no admin

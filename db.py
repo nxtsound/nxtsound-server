@@ -233,7 +233,8 @@ CREATE TABLE IF NOT EXISTS playback_diag(
   net_status TEXT NOT NULL DEFAULT '',
   net_expensive INTEGER NOT NULL DEFAULT 0,
   app_state TEXT NOT NULL DEFAULT '',
-  platform TEXT NOT NULL DEFAULT ''
+  platform TEXT NOT NULL DEFAULT '',
+  device TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_playback_diag_id ON playback_diag(id DESC);
 CREATE TABLE IF NOT EXISTS stem_cache(
@@ -311,6 +312,8 @@ def init_db() -> None:
                 c.execute(f"ALTER TABLE sessions ADD COLUMN {name} {ddl}")  # device list: name chosen by the user, browser, IP at login and at last use
                 if name == "active_at":
                     c.execute("UPDATE sessions SET active_at = last_seen")
+        if "device" not in {r["name"] for r in c.execute("PRAGMA table_info(playback_diag)")}:
+            c.execute("ALTER TABLE playback_diag ADD COLUMN device TEXT NOT NULL DEFAULT ''")  # beta.5 had no device column yet
         # there is always an admin: for old databases the oldest user
         if c.execute("SELECT COUNT(*) FROM users").fetchone()[0] and not c.execute("SELECT 1 FROM users WHERE is_admin = 1").fetchone():
             c.execute("UPDATE users SET is_admin = 1 WHERE id = (SELECT MIN(id) FROM users)")
@@ -1451,15 +1454,16 @@ def delete_login_blocks(key: str | None = None) -> int:
 MAX_PLAYBACK_DIAG = 5000  # a running log across all users, not a per-user archive: oldest snapshots are dropped first
 
 
-def save_playback_diag(user_id: int, entries: list[dict]) -> None:
+def save_playback_diag(user_id: int, entries: list[dict], device: str = "") -> None:
     if not entries:
         return
     with db() as c:
         c.executemany(
             "INSERT INTO playback_diag(user_id, ts, track_id, t, want_play, time_control, item_status, item_error, retries, net_status, "
-            "net_expensive, app_state, platform) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "net_expensive, app_state, platform, device) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [(user_id, e["ts"], e["track_id"][:200], e["t"], 1 if e["want_play"] else 0, e["time_control"][:40], e["item_status"][:40],
-              e["item_error"][:300], e["retries"], e["net_status"][:40], 1 if e["net_expensive"] else 0, e["app_state"][:20], e["platform"][:20])
+              e["item_error"][:300], e["retries"], e["net_status"][:40], 1 if e["net_expensive"] else 0, e["app_state"][:20], e["platform"][:20],
+              device[:60])
              for e in entries],
         )
         n = c.execute("SELECT COUNT(*) FROM playback_diag").fetchone()[0]
