@@ -396,10 +396,30 @@ function trackMenu(t, key, i) {
     else items.splice(1, 2);
     items.push({ label: tr('Remove from queue'), danger: true, fn: () => removeFromQueue(i) });
   }
+  if (key === 'now') items.push({ label: tr('Report a playback problem …'), fn: () => reportPlaybackProblem(t) });
   items.push({ label: tr('Stop recommending …'), danger: true, fn: () => dislikeMenu(t) });
   if (window.DEV && t.dev) items.push({ label: 'Why this song? (developer)', fn: () => DEV.why(t) });
   sheetMenu(t.title, items);
 }
+
+// ---------- Report a playback problem (admins can find it again: Admin area -> Playback, with DEVTOOLS=1) ----------
+
+function reportPlaybackProblem(t) {
+  openSheet(`<div class="sh-title">${esc(tr('Report a playback problem'))}</div>
+    <form data-report="${esc(t.id)}" class="secform">
+      <label>${esc(tr('What happened? (optional)'))}<input name="reason" maxlength="200" placeholder="${esc(tr('e.g. stopped on the lock screen'))}"></label>
+      <button class="btn" type="submit">${esc(tr('Send'))}</button></form>`);
+}
+
+$('#sheet .panel').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target.closest('form[data-report]');
+  if (!form) return;
+  const reason = form.elements.reason.value.trim();
+  closeSheet();
+  try { await api('/diag/report', { json: { track_id: form.dataset.report, reason } }); toast(tr('Thanks, noted.')); }
+  catch (err) { toast(err.message, 3000, true); }
+});
 
 // ---------- Stop recommending ----------
 
@@ -989,6 +1009,7 @@ async function viewRecap(my, params) {
 
 function adminTabs(sub) {
   const tabs = [['', tr('Overview')], ['users', tr('Users')], ['plugins', tr('Plugins')], ['system', tr('System')]];
+  if (S.devtools) tabs.push(['playback', tr('Playback')]);
   return `<nav class="asub">${tabs.map(([k, l]) => `<a href="#/admin${k ? '/' + k : ''}" class="${sub === k ? 'on' : ''}">${l}</a>`).join('')}</nav>`;
 }
 
@@ -1533,6 +1554,76 @@ async function adminSystem() {
     <p class="dim small hint" style="margin:10px 0 0">${esc(tr('The backup contains users (with password hashes), playlists and history, but no sessions. Keep it safe. The music files are not included. Restoring replaces everything with the state of the backup (the server first saves a copy of the current state in the data folder); everyone has to log in again afterwards.'))}</p></section>`;
 }
 
+// ---------- Admin: Playback (the app's debug mode, grouped by user, device and session; only a tab with DEVTOOLS=1) ----------
+
+const PB = { data: null, open: new Set() };  // `open`: session keys expanded by hand, kept across the periodic refresh
+const PB_VERDICT_COLOR = { green: '#5dd39e', yellow: '#ffb454', red: '#ff6b6b' };
+const PB_CONNECTION = { wifi: () => tr('Wi-Fi'), mobile: () => tr('Mobile data'), mixed: () => tr('Wi-Fi + mobile data') };
+
+function pbTime(ts) { return new Date(ts * 1000).toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'medium' }); }
+
+function pbEntryRow(e) {
+  const cls = e.item_status === 'failed' || e.net_status === 'unsatisfied' ? 'bad' : e.retries > 0 ? 'slow' : '';
+  return `<tr class="${cls}"><td class="dim">${esc(new Date(e.ts * 1000).toTimeString().slice(0, 8))}</td>
+    <td>${esc(e.app_state)}</td><td>${esc(e.time_control)}</td><td>${esc(e.item_status)}${e.item_error ? ` (${esc(e.item_error)})` : ''}</td>
+    <td>${esc(e.net_status)}${e.net_expensive ? ' 📱' : ''}</td><td class="n">${fmt(e.t)} s</td><td class="n">${e.retries}×</td></tr>`;
+}
+
+function pbSession(key, s) {
+  const open = PB.open.has(key);
+  const span = s.count > 1 ? `${pbTime(s.start)} – ${pbTime(s.end)}` : pbTime(s.start);
+  const flag = s.reports.length ? ` · <b style="color:${PB_VERDICT_COLOR.red}">${esc(trn(s.reports.length, '{n} report', '{n} reports'))}</b>` : '';
+  const head = `<button type="button" class="pbrow" data-act="pbToggle" data-pb="${esc(key)}" style="display:block;width:100%;text-align:left;background:none;border:0;color:inherit;padding:6px 0;cursor:pointer">
+    <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${PB_VERDICT_COLOR[s.verdict]};margin-right:8px"></span>
+    ${esc(span)} · ${esc(PB_CONNECTION[s.connection]())} · ${esc(trn(s.count, '{n} note', '{n} notes'))}${flag}</button>`;
+  if (!open) return head;
+  const reports = s.reports.map((r) => `<p class="dim small" style="margin:4px 0 4px 17px">⚑ ${esc(pbTime(r.ts))} (${esc(r.platform)}): ${esc(r.reason || tr('(no reason given)'))}</p>`).join('');
+  const table = `<div style="padding:0 0 10px 17px"><table>${s.entries.map(pbEntryRow).join('')}</table></div>`;
+  return `${head}${reports}${table}`;
+}
+
+function pbDevice(ui, di, d) {
+  return `<div style="margin:0 0 10px"><div class="sub" style="margin:0 0 2px"><b>${esc(d.device)}</b></div>
+    ${d.sessions.map((s, si) => pbSession(`${ui}:${di}:${si}`, s)).join('')}</div>`;
+}
+
+function pbRender() {
+  const el = document.getElementById('playbackBody');
+  if (!el) return;
+  const d = PB.data;
+  el.innerHTML = !d.users.length ? `<p class="dim">${esc(tr('No notes yet (needs a phone with Settings → Debug mode switched on).'))}</p>`
+    : d.users.map((u, ui) => `<section class="acard"><h3>${esc(u.user)}</h3>${u.devices.map((dev, di) => pbDevice(ui, di, dev)).join('')}</section>`).join('');
+}
+
+Object.assign(actions, {
+  pbToggle: (n) => {
+    const key = n.dataset.pb;
+    if (PB.open.has(key)) PB.open.delete(key); else PB.open.add(key);
+    pbRender();
+  },
+});
+
+async function pollPlayback() {
+  const my = S.nav;
+  let r;
+  try { r = await api('/admin/playback'); } catch (_) { return; }
+  if (my !== S.nav || !document.getElementById('playbackBody')) return;
+  PB.data = r;
+  pbRender();
+  setTimeout(pollPlayback, 15000);
+}
+
+async function adminPlayback() {
+  PB.data = await api('/admin/playback');
+  if (!PB.data.available) {
+    return `<p class="dim" style="padding:16px 0">${esc(tr('Nothing to show: needs DEVTOOLS=1 on the server.'))}</p>`;
+  }
+  setTimeout(pbRender, 0);  // #playbackBody is not in the DOM yet (this string has not been inserted); fill it right after it is
+  setTimeout(pollPlayback, 15000);
+  return `<div id="playbackBody"></div>
+    <p class="dim small" style="margin:14px 0 0">${esc(tr('The app’s debug mode (Settings → Debug mode, off by default) sends technical playback state every few seconds; a listener’s own "Report a playback problem" (player menu) is matched in by time. "Device" is only the kind the phone reports, so two of the same model look the same.'))}</p>`;
+}
+
 // The explanations on the system page are folded away; the "?" next to a card title shows them (and stays open over a refresh).
 const HINTS_OPEN = new Set();
 function foldHints(root) {
@@ -1558,8 +1649,9 @@ async function viewAdmin(my, sub = '') {
   const view = $('#view'), top = S.keepTop;
   if (!top) view.innerHTML = loading();  // on a refresh the old page stays until the new one is ready
   if (!S.user || !S.user.is_admin) { view.innerHTML = errorBox(tr('Admins only.')); return; }
-  if (!['', 'users', 'plugins', 'system'].includes(sub)) sub = '';
-  const body = await (sub === 'users' ? adminUsers() : sub === 'plugins' ? adminPlugins() : sub === 'system' ? adminSystem() : adminOverview());
+  if (!['', 'users', 'plugins', 'system'].concat(S.devtools ? ['playback'] : []).includes(sub)) sub = '';
+  const body = await (sub === 'users' ? adminUsers() : sub === 'plugins' ? adminPlugins() : sub === 'system' ? adminSystem()
+    : sub === 'playback' ? adminPlayback() : adminOverview());
   if (my !== S.nav) return;
   view.innerHTML = `<div class="acct wide">
     <div class="acct-head"><div><h1>${esc(tr('Admin area'))}</h1></div></div>

@@ -247,6 +247,15 @@ CREATE TABLE IF NOT EXISTS stem_cache(
   cached_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_stem_cache_cached_at ON stem_cache(cached_at);
+CREATE TABLE IF NOT EXISTS playback_reports(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  ts INTEGER NOT NULL,
+  track_id TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  platform TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_playback_reports_ts ON playback_reports(ts DESC);
 """
 
 
@@ -1472,10 +1481,35 @@ def save_playback_diag(user_id: int, entries: list[dict], device: str = "") -> N
 
 
 def playback_diag(limit: int = 300) -> list[dict]:
-    """The newest snapshots first (see `save_playback_diag`): for the devtools panel that looks for lock-screen stalls."""
+    """The newest snapshots first (see `save_playback_diag`): for the admin area's Playback page, which looks for lock-screen stalls."""
     with db() as c:
         rows = c.execute(
             "SELECT p.*, u.name AS user_name FROM playback_diag p JOIN users u ON u.id = p.user_id ORDER BY p.id DESC LIMIT ?", (limit,)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+MAX_PLAYBACK_REPORTS = 2000
+
+
+def save_playback_report(user_id: int, ts: int, track_id: str, reason: str, platform: str) -> None:
+    """A listener's own "something is wrong right now" note (the app's "Report a playback problem"): kept only while DEVTOOLS=1, like
+    the debug-mode snapshots it is meant to be matched against (see playbackdiag.py)."""
+    with db() as c:
+        c.execute(
+            "INSERT INTO playback_reports(user_id, ts, track_id, reason, platform) VALUES (?, ?, ?, ?, ?)",
+            (user_id, ts, track_id[:200], reason[:300], platform[:20]),
+        )
+        n = c.execute("SELECT COUNT(*) FROM playback_reports").fetchone()[0]
+        if n > MAX_PLAYBACK_REPORTS:
+            c.execute("DELETE FROM playback_reports WHERE id NOT IN (SELECT id FROM playback_reports ORDER BY id DESC LIMIT ?)", (MAX_PLAYBACK_REPORTS,))
+
+
+def playback_reports(limit: int = 1000) -> list[dict]:
+    """The newest reports first, with who made them."""
+    with db() as c:
+        rows = c.execute(
+            "SELECT p.*, u.name AS user_name FROM playback_reports p JOIN users u ON u.id = p.user_id ORDER BY p.id DESC LIMIT ?", (limit,)
         ).fetchall()
     return [dict(r) for r in rows]
 
