@@ -3,10 +3,10 @@ transition can ever cut it, separated once per song and kept - instead of once p
 works the same, just slower the first time a given pair is asked for).
 
 A background worker (`start`, hooked into `library.AFTER_SCAN` by main.py) works through the library while the server is otherwise idle. Any
-live bridge render (a listener is waiting) takes priority: the worker checks before every song whether one is under way and, if so, waits
-rather than start one more. It cannot interrupt a separation already running (the model does not support that), so the most a live request
-ever waits on the worker is whatever is already in flight - the same single `djmix._render_lock` a live render would wait on anyway without
-this cache.
+live bridge render (a listener is waiting) takes priority: the worker checks before every `CHUNK` seconds of the model's work whether one is
+under way and, if so, lets go and waits rather than start more. It cannot interrupt a chunk already running (the model does not support
+that), so the most a live request ever waits on the worker is one chunk - the same single `djmix._render_lock` a live render would wait on
+anyway without this cache, just no longer than before this cache existed.
 
 Correctness never depends on this cache: `read()` only hands back audio for a stretch it is sure it covers, and callers fall back to running
 the model themselves for anything else (a new song, one the background worker has not reached yet, or a request that lands just outside the
@@ -23,10 +23,17 @@ import db
 import library
 import stems
 
+try:
+    import numpy as np
+except ImportError:  # available() is False then anyway (stems.py needs it too): _precompute is never reached
+    np = None
+
 log = logging.getLogger("stemcache")
 
 CACHE_VER = 1  # raise when the cached window changes shape: old entries are then made again
 WINDOW = 40.0  # seconds from the very start, and from the very end, of a song: generous enough for any transition this server can make
+CHUNK = 10.0   # seconds of audio per call to the model: the most a live render ever has to wait for the worker to let go of it
+YIELD_AFTER_CHUNK = 0.5  # a pause after every chunk, so a live render that has been waiting actually gets to go first, not the worker again
 LIVE_GRACE = 10.0   # seconds after a live render that the worker stays out of the way, in case the next one follows close behind
 POLL_INTERVAL = 3.0  # how often the worker checks again while it is waiting for a live render to be over
 IDLE_INTERVAL = 30.0  # how often it checks for new songs once the library is fully cached
@@ -92,6 +99,28 @@ def read(track_id: str, path: Path, side: str, source_start: float, source_lengt
 
 # ---------- The background worker ----------
 
+def _separate_window(path: Path, start: float, length: float) -> "np.ndarray | None":
+    """The song's own singing for `length` seconds of `path` from `start`, done `CHUNK` seconds at a time so a live render is never kept
+    waiting for more than one chunk - None if a live render came in partway (the rest of this window is picked up again later)."""
+    import djmix  # noqa: PLC0415
+    pieces = []
+    done = 0.0
+    while done < length:
+        if _live_recently():
+            return None
+        step = min(CHUNK, length - done)
+        with djmix._render_lock:
+            if _live_recently():
+                return None
+            pcm = djmix._decode(path, start + done, step)
+            if len(pcm) == 0:
+                break
+            pieces.append(stems.vocals(pcm))
+        done += step
+        time.sleep(YIELD_AFTER_CHUNK)  # let a render that started waiting while the lock was held actually get it next, not this loop again
+    return np.concatenate(pieces, axis=0) if pieces else np.zeros((0, 2), dtype=np.float32)
+
+
 def _precompute(track_id: str, path: Path, dur: float) -> None:
     import djmix  # noqa: PLC0415
     a_start = max(0.0, dur - WINDOW)
@@ -100,15 +129,10 @@ def _precompute(track_id: str, path: Path, dur: float) -> None:
     out_a, out_b = _paths(track_id)
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     for side, dest, start, length in (("a", out_a, a_start, a_len), ("b", out_b, 0.0, b_len)):
-        if _live_recently():
-            return  # a listener's own transition came in: stop here, the rest of this song is picked up again later
-        with djmix._render_lock:
-            if _live_recently():
-                return
-            pcm = djmix._decode(path, start, length)
-            if len(pcm) == 0:
-                return
-            djmix._encode(stems.vocals(pcm), dest)
+        vocals = _separate_window(path, start, length)
+        if vocals is None or len(vocals) == 0:
+            return  # interrupted by a live request, or nothing decoded: the rest (and this side again) is picked up next time
+        djmix._encode(vocals, dest)
     size = (out_a.stat().st_size if out_a.is_file() else 0) + (out_b.stat().st_size if out_b.is_file() else 0)
     db.stem_cache_set(track_id, CACHE_VER, a_start, a_len, b_len, size)
     for dropped in db.stem_cache_evict(MAX_BYTES):

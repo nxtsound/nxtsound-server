@@ -22,6 +22,7 @@ minor versions may contain breaking changes, which are called out.
 - DJ transitions made by the server: the new song's own file now takes over in half a second instead of two, so the bridge and the song are no longer heard side by side.
 - DJ transitions made by the server: a short bass clash or doubled sound right where the old song faded into the bridge, caused by the player giving up on lining them up sample-exactly after only three tries. It now keeps trying for a good while longer, and would rather play no bridge at all than a badly aligned one.
 - “Similar” songs could drift into an unrelated genre (and sometimes back): a different genre by a different artist now counts against a song instead of merely not helping it.
+- DJ_STEMS's background separation (see above) could starve a listener's own transition of the model for as long as it kept going from song to song, leaving it stuck “planned” and never made. It now does the model's work in much smaller pieces and checks before every one, so a live transition waits for it no longer than it would have without this cache.
 - The size of small files is shown in KB instead of “0.0 MB”.
 - Developer tools, Analysis tab: a song that had not been analyzed yet always showed “not analyzed”; it is analyzed when the tab opens.
 
