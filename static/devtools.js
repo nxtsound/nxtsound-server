@@ -229,7 +229,7 @@
       rows.push(row('style', `<b>${esc(p.style)}</b>${fade ? ' (plain crossfade: no tempo or key used)' : ''}`));
       if (!fade) {
         rows.push(row('tempo', `${f1(a && a.bpm)} → ${f1(b && b.bpm)} BPM${b && Math.abs(p.bpmB - b.bpm) > 0.5 ? ` (read as ${f1(p.bpmB)}, half or double)` : ''}`));
-        rows.push(row('tempo match', p.lock ? `<span class="ok">locked</span>, the next song is played at ${(p.rate * 100).toFixed(1)} % speed` : '<span class="slow">not locked</span> (more than 8 % apart): echo transition, speed unchanged'));
+        rows.push(row('tempo match', p.lock ? `<span class="ok">locked</span>, the next song is played at ${(p.rate * 100).toFixed(1)} % speed` : '<span class="slow">not locked</span> (more than 8 % apart): speed unchanged, a style that does not need a tempo match'));
         rows.push(row('key', `${esc((a && a.key) || '?')} → ${esc((b && b.key) || '?')}: ${info.fit > 0 ? '<span class="ok">fits</span>' : info.fit < 0 ? '<span class="bad">clashes</span> (no bass swap)' : 'unclear or not sure enough (confidence under 0.35)'}`));
         rows.push(row('grid', info.bars ? 'bars: both songs have a sure downbeat' : 'single beats: the downbeat is not sure in both songs'));
         rows.push(row('old song', info.hasOutro ? `has an outro from ${f1(a && a.outro_start)} s` : 'no usable outro: the transition starts as late as fits'));

@@ -15,6 +15,7 @@ minor versions may contain breaking changes, which are called out.
 - **DJ transitions made by the server:** for songs of the library the server now makes the transition itself (a short file with the end of one song and the start of the next, lined up to the sample with the tempo matched and the effect applied) and the player fades over to it. The beats no longer depend on the timing of the browser, play, pause, jumping and skipping work on the transition, and the screen shows *Old song > New song* by *NxtSound DJ*. Turn off with `DJ_BRIDGES=0` or in the DJ menu. `tools/render_bridge.py` makes one from two files for listening.
 - Developer tools, DJ tab: a report for every finished transition (how far apart the beats were, speed, stalls, late start, whether the listener stayed) with a light, a table per style and a button to copy it.
 - **Developer tools** (`DEVTOOLS=1`, admins only, off by default): a *DEV* button in the header opens a panel. Every song of a radio shows the score it was chosen with, split into its parts; the lists under *For you* say why a song is in them; the DJ tab shows the plan of each transition; the Analysis tab draws what the tempo analysis saw; the Home tab shows the seeds, the cache and the time per widget; the Plugins tab lists the calls to plugins. A fixed dice repeats a radio or mix, and a snapshot with every name replaced can be attached to a bug report and loaded with `tools/load_snapshot.py`. See the developer guide.
+- DJ: the tempo match between two songs is now accepted up to 15 % apart instead of 8 %, so more pairs get a real tempo-matched transition (blend, filter, bass, loop) instead of falling back to a style that does not need one (echo, cut, reverb).
 
 ### Fixed
 - The same song from the library and from a plugin no longer appears twice: a plugin radio and the home page put the library's copy in the list instead (it plays from the files, and the DJ can mix it), search shows a song once, and the player skips a radio song that is in the queue already under another source.
@@ -25,6 +26,8 @@ minor versions may contain breaking changes, which are called out.
 - DJ_STEMS's background separation (see above) could starve a listener's own transition of the model for as long as it kept going from song to song, leaving it stuck “planned” and never made. It now does the model's work in much smaller pieces and checks before every one, so a live transition waits for it no longer than it would have without this cache.
 - The size of small files is shown in KB instead of “0.0 MB”.
 - Developer tools, Analysis tab: a song that had not been analyzed yet always showed “not analyzed”; it is analyzed when the tab opens.
+- DJ transitions made by the server: if the hand-over from the bridge into the new song's own file failed (a stall), the song started over from its very beginning once the bridge ran out instead of from where the bridge had already got to.
+- Developer tools, DJ tab: a transition that did not need the tempo to match always said “echo transition” regardless of the style actually used (e.g. cut or reverb).
 
 ## [0.3.1] – 2026-10-23
 
