@@ -3290,7 +3290,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 window.addEventListener('pagehide', savePos);
 
 audio.addEventListener('ended', () => {
-  if (DJ.plan && DJ.plan.bridge && DJ.plan.started && !DJ.plan.switched && !DJ.plan.bFailed) { djBridgeEnded(DJ.plan); return; }  // the bridge ran out before the new song took over
+  if (DJ.plan && DJ.plan.bridge && DJ.plan.started && !DJ.plan.switched) { djBridgeEnded(DJ.plan); return; }  // the bridge ran out before the new song took over (also after a failed hand-off: still resume at bResume, not at 0)
   evlog(`ended at ${audio.currentTime.toFixed(0)} s${document.visibilityState === 'hidden' ? ' (background)' : ''}`);
   savePos();
   if (S.repeat === 'one') { audio.currentTime = 0; audio.play().catch(() => {}); } else next();
